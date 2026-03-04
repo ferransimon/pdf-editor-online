@@ -1,65 +1,199 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { PDFDocumentProxy } from "pdfjs-dist";
+
+import { ModeSelector } from "@/components/mode-selector";
+import { MergeEditor } from "@/components/merge-editor";
+import { Uploader } from "@/components/uploader";
+import { Toolbar } from "@/components/toolbar";
+import { SidebarThumbnails } from "@/components/sidebar-thumbnails";
+import { SectionPreview } from "@/components/section-preview";
+import { SectionList } from "@/components/section-list";
+import type { PdfFile } from "@/lib/file-access";
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+interface Section {
+  start: number;
+  end: number;
+}
+
+function getSections(pageCount: number, splitPoints: Set<number>): Section[] {
+  if (pageCount === 0) return [];
+  const sorted = [0, ...Array.from(splitPoints).sort((a, b) => a - b), pageCount];
+  return sorted.slice(0, -1).map((start, i) => ({
+    start,
+    end: sorted[i + 1] - 1,
+  }));
+}
+
+function getDefaultName(section: Section): string {
+  if (section.start === section.end) return `Página ${section.start + 1}`;
+  return `Páginas ${section.start + 1}-${section.end + 1}`;
+}
+
+// ─── page ───────────────────────────────────────────────────────────────────
+
+type Phase = "idle" | "split-upload" | "loading" | "loaded" | "merge";
 
 export default function Home() {
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [pdfName, setPdfName] = useState("");
+  const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
+  const [thumbnails, setThumbnails] = useState<string[]>([]);
+  const [splitPoints, setSplitPoints] = useState<Set<number>>(new Set());
+  const [sectionNames, setSectionNames] = useState<string[]>([]);
+  const [activeSection, setActiveSection] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+
+  const docRef = useRef<PDFDocumentProxy | null>(null);
+
+  const sections = getSections(thumbnails.length, splitPoints);
+
+  // ── file loaded ────────────────────────────────────────────────────────────
+  const handleFileLoaded = useCallback(async (file: PdfFile) => {
+    setPhase("loading");
+    setPdfName(file.name);
+    setPdfBytes(file.bytes);
+    setSplitPoints(new Set());
+    setThumbnails([]);
+    setActiveSection(0);
+
+    const { loadPdfDocument, renderPageToDataUrl } = await import(
+      "@/lib/pdf-renderer"
+    );
+
+    const doc = await loadPdfDocument(file.bytes);
+    docRef.current = doc;
+
+    // Blank placeholders so the UI can show skeletons immediately
+    const blanks: string[] = new Array(doc.numPages).fill("");
+    setThumbnails([...blanks]);
+    setSectionNames([getDefaultName({ start: 0, end: doc.numPages - 1 })]);
+    setPhase("loaded");
+
+    // Render thumbnails progressively (scale 0.4 for sidebar)
+    for (let i = 1; i <= doc.numPages; i++) {
+      const dataUrl = await renderPageToDataUrl(doc, i, 0.4);
+      blanks[i - 1] = dataUrl;
+      setThumbnails([...blanks]);
+    }
+  }, []);
+
+  // ── split points ───────────────────────────────────────────────────────────
+  const handleToggleSplit = useCallback((index: number) => {
+    setSplitPoints((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
+  // Recompute section names when sections change (resets to defaults)
+  useEffect(() => {
+    const secs = getSections(thumbnails.length, splitPoints);
+    setSectionNames(secs.map(getDefaultName));
+    setActiveSection((prev) => Math.min(prev, Math.max(0, secs.length - 1)));
+     
+  }, [splitPoints, thumbnails.length]);
+
+  // ── download ───────────────────────────────────────────────────────────────
+  const handleDownload = async () => {
+    if (!pdfBytes || sections.length === 0) return;
+    setDownloading(true);
+    try {
+      const { splitPdf } = await import("@/lib/pdf-splitter");
+      const { buildZip } = await import("@/lib/zip-builder");
+
+      const splitSections = sections.map((s, i) => ({
+        name: sectionNames[i] || getDefaultName(s),
+        pages: Array.from({ length: s.end - s.start + 1 }, (_, k) => s.start + k),
+      }));
+
+      const results = await splitPdf(pdfBytes, splitSections);
+      await buildZip(results, pdfName);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // ── reset ──────────────────────────────────────────────────────────────────
+  const handleReset = () => {
+    docRef.current?.destroy();
+    docRef.current = null;
+    setPdfBytes(null);
+    setPdfName("");
+    setThumbnails([]);
+    setSplitPoints(new Set());
+    setSectionNames([]);
+    setActiveSection(0);
+    setPhase("idle");
+  };
+
+  // ── render ─────────────────────────────────────────────────────────────────
+  if (phase === "idle") {
+    return (
+      <ModeSelector
+        onSplit={() => setPhase("split-upload")}
+        onMerge={() => setPhase("merge")}
+      />
+    );
+  }
+
+  if (phase === "merge") {
+    return <MergeEditor onBack={() => setPhase("idle")} />;
+  }
+
+  if (phase === "split-upload" || phase === "loading") {
+    return (
+      <Uploader
+        onFileLoaded={handleFileLoaded}
+        loading={phase === "loading"}
+        onBack={() => setPhase("idle")}
+      />
+    );
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="flex flex-col h-screen overflow-hidden bg-white">
+      <Toolbar
+        pdfName={pdfName}
+        sectionCount={sections.length}
+        downloading={downloading}
+        onDownload={handleDownload}
+        onReset={handleReset}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        <SidebarThumbnails
+          thumbnails={thumbnails}
+          splitPoints={splitPoints}
+          activeSection={activeSection}
+          sections={sections}
+          onToggleSplit={handleToggleSplit}
+          onSelectSection={setActiveSection}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <SectionPreview
+          pdfDoc={docRef.current}
+          thumbnails={thumbnails}
+          section={sections[activeSection] ?? null}
+          sectionName={sectionNames[activeSection] ?? ""}
+        />
+        <SectionList
+          sections={sections}
+          sectionNames={sectionNames}
+          activeSection={activeSection}
+          onRenameSection={(i, name) =>
+            setSectionNames((prev) => {
+              const next = [...prev];
+              next[i] = name;
+              return next;
+            })
+          }
+          onSelectSection={setActiveSection}
+        />
+      </div>
     </div>
   );
 }
