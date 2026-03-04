@@ -139,12 +139,18 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
             `Renderizando ${file.name} — pág. ${pi}/${doc.numPages}…`
           );
           const thumbnail = await renderPageToDataUrl(doc, pi, 0.5);
+          // Get the effective page dimensions from pdfjs (resolves CropBox /
+          // inherited MediaBox / rotation) so mergePages can normalise them.
+          const pdfjsPage = await doc.getPage(pi);
+          const viewport = pdfjsPage.getViewport({ scale: 1 });
           newPages.push({
             id: nextId(),
             sourceIndex: sourceOffset + fi,
             pageIndex: pi - 1,
             thumbnail,
             sourceName: file.name.replace(/\.pdf$/i, ""),
+            widthPt: viewport.width,
+            heightPt: viewport.height,
           });
         }
         doc.destroy();
