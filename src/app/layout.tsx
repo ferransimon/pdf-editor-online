@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Splitter",
-  description: "Divide y descarga tu PDF en partes directamente en el navegador",
+  title: "PDF Editor Online",
+  description: "Una aplicación web para dividir, unir y anotar archivos PDF de forma gratuita y sin necesidad de registrarse.",
 };
 
 export default function RootLayout({
