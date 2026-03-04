@@ -7,6 +7,7 @@ import { DonateButton } from "@/components/donate-button";
 import { MobileWarning } from "@/components/mobile-warning";
 import { I18nProvider } from "@/i18n";
 import { LanguageSelector } from "@/components/language-selector";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,6 +51,7 @@ export default function RootLayout({
             <ThemeToggle />
           </I18nProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
