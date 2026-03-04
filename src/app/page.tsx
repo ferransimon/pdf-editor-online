@@ -5,6 +5,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 
 import { ModeSelector } from "@/components/mode-selector";
 import { MergeEditor } from "@/components/merge-editor";
+import { AnnotationEditor } from "@/components/annotation-editor";
 import { Uploader } from "@/components/uploader";
 import { Toolbar } from "@/components/toolbar";
 import { SidebarThumbnails } from "@/components/sidebar-thumbnails";
@@ -35,12 +36,14 @@ function getDefaultName(section: Section): string {
 
 // ─── page ───────────────────────────────────────────────────────────────────
 
-type Phase = "idle" | "split-upload" | "loading" | "loaded" | "merge";
+type Phase = "idle" | "split-upload" | "loading" | "loaded" | "merge" | "annotate-upload" | "annotate";
 
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [pdfName, setPdfName] = useState("");
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
+  const [annotatePdfBytes, setAnnotatePdfBytes] = useState<ArrayBuffer | null>(null);
+  const [annotatePdfName, setAnnotatePdfName] = useState("");
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [splitPoints, setSplitPoints] = useState<Set<number>>(new Set());
   const [sectionNames, setSectionNames] = useState<string[]>([]);
@@ -138,12 +141,36 @@ export default function Home() {
       <ModeSelector
         onSplit={() => setPhase("split-upload")}
         onMerge={() => setPhase("merge")}
+        onAnnotate={() => setPhase("annotate-upload")}
       />
     );
   }
 
   if (phase === "merge") {
     return <MergeEditor onBack={() => setPhase("idle")} />;
+  }
+
+  if (phase === "annotate") {
+    return (
+      <AnnotationEditor
+        pdfBytes={annotatePdfBytes!}
+        pdfName={annotatePdfName}
+        onBack={() => setPhase("idle")}
+      />
+    );
+  }
+
+  if (phase === "annotate-upload") {
+    return (
+      <Uploader
+        onFileLoaded={async (file) => {
+          setAnnotatePdfBytes(file.bytes);
+          setAnnotatePdfName(file.name);
+          setPhase("annotate");
+        }}
+        onBack={() => setPhase("idle")}
+      />
+    );
   }
 
   if (phase === "split-upload" || phase === "loading") {

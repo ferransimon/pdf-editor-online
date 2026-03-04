@@ -1,17 +1,18 @@
 "use client";
 
-import { Scissors, Merge } from "lucide-react";
+import { Scissors, Merge, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ModeSelectorProps {
   onSplit: () => void;
   onMerge: () => void;
+  onAnnotate: () => void;
 }
 
-export function ModeSelector({ onSplit, onMerge }: ModeSelectorProps) {
+export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-white">
-      <div className="flex flex-col items-center gap-10 max-w-lg w-full px-8">
+      <div className="flex flex-col items-center gap-10 max-w-xl w-full px-8">
         <div className="flex flex-col items-center gap-2 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
             PDF Editor
@@ -21,7 +22,7 @@ export function ModeSelector({ onSplit, onMerge }: ModeSelectorProps) {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 w-full">
+        <div className="grid grid-cols-3 gap-4 w-full">
           <ModeCard
             icon={<Scissors className="h-6 w-6" />}
             title="Dividir"
@@ -33,6 +34,12 @@ export function ModeSelector({ onSplit, onMerge }: ModeSelectorProps) {
             title="Unir"
             description="Combina varios PDFs en uno y reordena sus páginas"
             onClick={onMerge}
+          />
+          <ModeCard
+            icon={<PenLine className="h-6 w-6" />}
+            title="Anotar"
+            description="Añade texto, dibujos y formas sobre las páginas"
+            onClick={onAnnotate}
           />
         </div>
       </div>
