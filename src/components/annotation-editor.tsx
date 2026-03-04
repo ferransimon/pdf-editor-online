@@ -22,6 +22,7 @@ import type {
   RectAnnotation,
   ImageAnnotation,
 } from "@/lib/pdf-annotator";
+import { useI18n } from "@/i18n";
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -109,6 +110,8 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   // Hidden file input for image upload
   const imageInputRef = useRef<HTMLInputElement>(null);
   const redrawOverlayRef = useRef<(pageIdx: number, extraAnn?: Annotation) => void>(() => {});
+
+  const { t } = useI18n();
 
   // Mirror reactive state into refs so pointer handlers always read latest values
   const annotationsRef = useRef<Map<number, Annotation[]>>(new Map());
@@ -539,7 +542,7 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
       // Build print-only HTML page
       const win = window.open("", "_blank");
       if (!win) {
-        alert("Activa las ventanas emergentes para poder imprimir.");
+        alert(t.annotate.popupsAlert);
         return;
       }
 
@@ -547,7 +550,7 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>${pdfName.replace(/\.pdf$/i, "")} — imprimir</title>
+  <title>${pdfName.replace(/\.pdf$/i, "")} — ${t.annotate.printDocTitle}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: #525659; }
@@ -607,7 +610,7 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
           className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 transition-colors mr-1"
         >
           <ArrowLeft className="h-4 w-4" />
-          Volver
+          {t.annotate.back}
         </button>
 
         <div className="h-4 w-px bg-zinc-200" />
@@ -622,17 +625,17 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
         <div className="flex items-center gap-1">
           {(
             [
-              { t: "draw" as Tool, icon: <Pencil className="h-3.5 w-3.5" />, label: "Dibujar" },
-              { t: "text" as Tool, icon: <Type className="h-3.5 w-3.5" />, label: "Texto" },
-              { t: "rect" as Tool, icon: <Square className="h-3.5 w-3.5" />, label: "Rectángulo" },
+              { id: "draw" as Tool, icon: <Pencil className="h-3.5 w-3.5" />, label: t.annotate.draw },
+              { id: "text" as Tool, icon: <Type className="h-3.5 w-3.5" />, label: t.annotate.text },
+              { id: "rect" as Tool, icon: <Square className="h-3.5 w-3.5" />, label: t.annotate.rect },
             ] as const
-          ).map(({ t, icon, label }) => (
+          ).map(({ id, icon, label }) => (
             <button
-              key={t}
+              key={id}
               title={label}
-              onClick={() => setTool(t)}
+              onClick={() => setTool(id)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                tool === t
+                tool === id
                   ? "bg-zinc-900 text-white"
                   : "text-zinc-600 hover:bg-zinc-100"
               }`}
@@ -644,12 +647,12 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
 
           {/* Image button — opens file picker directly */}
           <button
-            title="Insertar imagen"
+            title={t.annotate.insertImage}
             onClick={() => imageInputRef.current?.click()}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-600 hover:bg-zinc-100 transition-colors"
           >
             <ImageIcon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Imagen</span>
+            <span className="hidden sm:inline">{t.annotate.image}</span>
           </button>
           <input
             ref={imageInputRef}
@@ -700,7 +703,7 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
           <>
             <div className="h-4 w-px bg-zinc-200" />
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-zinc-400">Tamaño</span>
+              <span className="text-xs text-zinc-400">{t.annotate.fontSize}</span>
               <select
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
@@ -722,7 +725,7 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
               {LINE_WIDTHS.map((w, i) => (
                 <button
                   key={w}
-                  title={`Grosor ${w}px`}
+                  title={t.annotate.lineWidthTitle(LINE_WIDTHS[i])}
                   onClick={() => setLineWidthIdx(i)}
                   className={`px-2 py-2 rounded-md flex items-center justify-center transition-colors ${
                     lineWidthIdx === i
@@ -746,11 +749,11 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
         <button
           onClick={handleUndo}
           disabled={!hasAnnotationsOnPage}
-          title="Deshacer última anotación"
+          title={t.annotate.undoTitle}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-600 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           <Undo2 className="h-4 w-4" />
-          <span className="hidden sm:inline">Deshacer</span>
+          <span className="hidden sm:inline">{t.annotate.undo}</span>
         </button>
 
         <Button onClick={handlePrint} disabled={downloading} size="sm" className="gap-1.5">
@@ -759,7 +762,7 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
           ) : (
             <Printer className="h-4 w-4" />
           )}
-          Imprimir
+          {t.annotate.print}
         </Button>
       </div>
 
@@ -768,13 +771,13 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
         {pageCount === 0 ? (
           <div className="flex flex-col items-center gap-3 mt-32">
             <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-            <p className="text-sm text-zinc-500">Cargando PDF…</p>
+            <p className="text-sm text-zinc-500">{t.annotate.loadingPdf}</p>
           </div>
         ) : (
           <>
             {/* Page counter */}
             <p className="text-xs text-zinc-500 select-none">
-              Página {currentPage + 1} de {pageCount}
+              {t.annotate.pageOf(currentPage + 1, pageCount)}
             </p>
 
             {/* Canvas stack */}
@@ -863,14 +866,14 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
                       onClick={commitPendingText}
                       className="px-3 py-1 rounded-md text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-700 shadow"
                     >
-                      Confirmar
+                      {t.annotate.confirm}
                     </button>
                     <button
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => setPendingText(null)}
                       className="px-3 py-1 rounded-md text-xs font-medium bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 shadow"
                     >
-                      Cancelar
+                      {t.annotate.cancel}
                     </button>
                   </div>
                 </div>
@@ -984,14 +987,14 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
                       onClick={commitPendingImage}
                       className="px-3 py-1 rounded-md text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-700 shadow"
                     >
-                      Confirmar
+                      {t.annotate.confirm}
                     </button>
                     <button
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => setPendingImage(null)}
                       className="px-3 py-1 rounded-md text-xs font-medium bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 shadow"
                     >
-                      Cancelar
+                      {t.annotate.cancel}
                     </button>
                   </div>
                 </div>
@@ -1006,14 +1009,14 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
                 className="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-zinc-600 hover:bg-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="h-4 w-4" />
-                Anterior
+                {t.annotate.previous}
               </button>
               <button
                 onClick={() => changePage(1)}
                 disabled={currentPage === pageCount - 1}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm text-zinc-600 hover:bg-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                Siguiente
+                {t.annotate.next}
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -1031,14 +1034,14 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
             className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm flex flex-col gap-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-base font-semibold text-zinc-900">Añadir texto</h2>
+            <h2 className="text-base font-semibold text-zinc-900">{t.annotate.addTextTitle}</h2>
 
             <textarea
               autoFocus
               rows={4}
               value={textDialogValue}
               onChange={(e) => setTextDialogValue(e.target.value)}
-              placeholder="Escribe el texto aquí…"
+              placeholder={t.annotate.textPlaceholder}
               className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 resize-none focus:outline-none focus:ring-2 focus:ring-zinc-400"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleDialogSave();
@@ -1047,7 +1050,7 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
             />
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500">Tamaño</span>
+              <span className="text-xs text-zinc-500">{t.annotate.fontSize}</span>
               <select
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
@@ -1060,12 +1063,12 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
               <div
                 className="h-5 w-5 rounded-full border border-zinc-300 ml-auto"
                 style={{ backgroundColor: color }}
-                title="Color actual"
+                title={t.annotate.currentColor}
               />
             </div>
 
             <p className="text-xs text-zinc-400">
-              El texto aparecerá en el centro de la página. Podrás arrastrarlo al lugar exacto.
+              {t.annotate.textHint}
             </p>
 
             <div className="flex gap-2 justify-end">
@@ -1073,10 +1076,10 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
                 onClick={() => setTextDialogOpen(false)}
                 className="px-4 py-2 rounded-lg text-sm text-zinc-600 hover:bg-zinc-100 transition-colors"
               >
-                Cancelar
+                {t.annotate.cancel}
               </button>
               <Button onClick={handleDialogSave} size="sm" disabled={!textDialogValue.trim()}>
-                Insertar texto
+                {t.annotate.insertText}
               </Button>
             </div>
           </div>

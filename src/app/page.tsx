@@ -163,6 +163,7 @@ export default function Home() {
   if (phase === "annotate-upload") {
     return (
       <Uploader
+        mode="annotate"
         onFileLoaded={async (file) => {
           setAnnotatePdfBytes(file.bytes);
           setAnnotatePdfName(file.name);

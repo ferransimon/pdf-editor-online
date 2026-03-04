@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { MergePage, MergeSource } from "@/lib/pdf-merger";
+import { useI18n } from "@/i18n";
 
 type SubPhase = "idle" | "loading" | "editing";
 
@@ -45,6 +46,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
   const [loadingLabel, setLoadingLabel] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   // ── page preview state ────────────────────────────────────────────────────
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
@@ -112,7 +114,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
         (f) => f.type === "application/pdf" || f.name.endsWith(".pdf")
       );
       if (!pdfs.length) {
-        setError("Selecciona al menos un archivo PDF.");
+        setError(t.merge.errorSelect);
         return;
       }
       setError(null);
@@ -342,15 +344,15 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
             className="self-start flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700 transition-colors"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Volver
+            {t.merge.back}
           </button>
 
           <div className="flex flex-col items-center gap-2 text-center">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-              Unir PDFs
+              {t.merge.title}
             </h1>
             <p className="text-sm text-zinc-400">
-              Selecciona 2 o más PDFs. Luego podrás reordenar las páginas.
+              {t.merge.subtitle}
             </p>
           </div>
 
@@ -374,10 +376,10 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
             </div>
             <div className="flex flex-col items-center gap-1 text-center">
               <p className="text-sm font-medium text-zinc-900">
-                Arrastra los PDFs aquí
+                {t.merge.dragHere}
               </p>
               <p className="text-xs text-zinc-400">
-                o haz clic para seleccionarlos
+                {t.merge.dragOr}
               </p>
             </div>
           </div>
@@ -387,7 +389,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
           )}
 
           <Button onClick={openFilePicker} variant="outline" className="w-full">
-            Seleccionar PDFs
+            {t.merge.selectPdfs}
           </Button>
         </div>
       </div>
@@ -404,23 +406,23 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
           className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-700 transition-colors shrink-0"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Volver
+          {t.merge.back}
         </button>
         <div className="w-px h-4 bg-zinc-200" />
         <span className="text-sm font-semibold text-zinc-900 shrink-0">
-          Unir PDFs
+          {t.merge.title}
         </span>
         <div className="flex-1" />
         <span className="text-xs text-zinc-400 shrink-0">
-          {pages.length} página{pages.length !== 1 ? "s" : ""} ·{" "}
-          {sources.length} archivo{sources.length !== 1 ? "s" : ""}
+          {pages.length} {pages.length !== 1 ? t.merge.pagePlural : t.merge.pageSingular} ·{" "}
+          {sources.length} {sources.length !== 1 ? t.merge.filePlural : t.merge.fileSingular}
         </span>
         <div className="flex items-center gap-1 border border-zinc-200 rounded-md overflow-hidden">
           <Input
             value={outputName}
             onChange={(e) => setOutputName(e.target.value)}
             className="h-7 text-xs border-0 rounded-none w-44 focus-visible:ring-0"
-            placeholder="nombre del archivo"
+            placeholder={t.merge.filenamePlaceholder}
           />
           <span className="text-xs text-zinc-400 pr-2">.pdf</span>
         </div>
@@ -431,18 +433,18 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
           disabled={downloading}
         >
           <Plus className="h-3.5 w-3.5" />
-          Añadir PDFs
+          {t.merge.addPdfs}
         </Button>
         <Button size="sm" onClick={handleDownload} disabled={downloading || pages.length === 0}>
           {downloading ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Generando…
+              {t.merge.generating}
             </>
           ) : (
             <>
               <Download className="h-3.5 w-3.5" />
-              Descargar PDF
+              {t.merge.downloadPdf}
             </>
           )}
         </Button>
@@ -453,11 +455,11 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
         {pages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <p className="text-sm text-zinc-400">
-              Todas las páginas han sido eliminadas.
+              {t.merge.allPagesDeleted}
             </p>
             <Button variant="outline" size="sm" onClick={openFilePicker}>
               <Plus className="h-3.5 w-3.5" />
-              Añadir PDFs
+              {t.merge.addPdfs}
             </Button>
           </div>
         ) : (
@@ -540,7 +542,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={page.thumbnail}
-                          alt={`Página ${displayIdx + 1}`}
+                          alt={`${t.merge.pageShort} ${displayIdx + 1}`}
                           className="w-full h-full object-contain"
                           draggable={false}
                         />
@@ -555,7 +557,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
                       {/* Footer */}
                       <div className="flex flex-col gap-0.5 px-2 py-1.5 border-t border-zinc-100">
                         <span className="text-[10px] font-medium text-zinc-700 leading-none">
-                          Pág. {displayIdx + 1}
+                          {t.merge.pageShort} {displayIdx + 1}
                         </span>
                         <span className="text-[9px] text-zinc-400 leading-none truncate" title={page.sourceName}>
                           {page.sourceName}
@@ -602,7 +604,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
             {previewLoading || !previewDataUrl ? (
               <div className="flex flex-col items-center gap-3 text-white">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="text-sm">Cargando…</span>
+                <span className="text-sm">{t.merge.loadingPreview}</span>
               </div>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
@@ -627,7 +629,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
 
           {/* Page counter */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-3 py-1.5 rounded-full">
-            Pág. {previewIdx + 1} / {pages.length}
+            {t.merge.pageShort} {previewIdx + 1} / {pages.length}
             {pages[previewIdx] && (
               <span className="ml-2 opacity-60">{pages[previewIdx].sourceName}</span>
             )}

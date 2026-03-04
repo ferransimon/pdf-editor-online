@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useI18n } from "@/i18n";
 
 interface Section {
   start: number;
@@ -23,6 +24,7 @@ export function SectionPreview({
   sectionName,
 }: SectionPreviewProps) {
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!pdfDoc || !section) {
@@ -54,15 +56,15 @@ export function SectionPreview({
   if (!section) {
     return (
       <div className="flex flex-1 items-center justify-center bg-zinc-50">
-        <p className="text-sm text-zinc-400">Selecciona una sección</p>
+        <p className="text-sm text-zinc-400">{t.sectionPreview.selectSection}</p>
       </div>
     );
   }
 
   const pageLabel =
     section.start === section.end
-      ? `Página ${section.start + 1}`
-      : `Páginas ${section.start + 1}–${section.end + 1}`;
+      ? `${t.sectionPreview.pageSingular} ${section.start + 1}`
+      : `${t.sectionPreview.pagePlural} ${section.start + 1}–${section.end + 1}`;
 
   return (
     <div className="flex flex-1 flex-col min-w-0 bg-zinc-50">
@@ -84,7 +86,7 @@ export function SectionPreview({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={src}
-                  alt={`Página ${section.start + i + 1}`}
+                  alt={`${t.sectionPreview.pageSingular} ${section.start + i + 1}`}
                   className="w-full h-auto block"
                 />
               </div>

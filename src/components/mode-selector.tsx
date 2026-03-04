@@ -2,6 +2,7 @@
 
 import { Scissors, Merge, PenLine, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 interface ModeSelectorProps {
   onSplit: () => void;
@@ -10,6 +11,7 @@ interface ModeSelectorProps {
 }
 
 export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps) {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-screen items-center justify-center bg-white">
       <div className="flex flex-col items-center gap-10 max-w-xl w-full px-8">
@@ -18,27 +20,27 @@ export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps
             PDF Editor
           </h1>
           <p className="text-sm text-zinc-400">
-            ¿Qué quieres hacer con tus PDFs?
+            {t.modeSelector.subtitle}
           </p>
         </div>
 
         <div className="grid grid-cols-3 gap-4 w-full">
           <ModeCard
             icon={<Scissors className="h-6 w-6" />}
-            title="Dividir"
-            description="Separa un PDF en múltiples archivos independientes"
+            title={t.modeSelector.split}
+            description={t.modeSelector.splitDesc}
             onClick={onSplit}
           />
           <ModeCard
             icon={<Merge className="h-6 w-6" />}
-            title="Unir"
-            description="Combina varios PDFs en uno y reordena sus páginas"
+            title={t.modeSelector.merge}
+            description={t.modeSelector.mergeDesc}
             onClick={onMerge}
           />
           <ModeCard
             icon={<PenLine className="h-6 w-6" />}
-            title="Anotar"
-            description="Añade texto, dibujos y formas sobre las páginas"
+            title={t.modeSelector.annotate}
+            description={t.modeSelector.annotateDesc}
             onClick={onAnnotate}
           />
         </div>
@@ -47,8 +49,8 @@ export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps
         <div className="flex items-start gap-2.5 rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-left w-full">
           <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-zinc-400" />
           <p className="text-xs text-zinc-400 leading-relaxed">
-            <span className="font-medium text-zinc-500">100% privado.</span>{" "}
-            Todos los archivos se procesan directamente en tu navegador. Ningún PDF es enviado ni almacenado en ningún servidor.
+            <span className="font-medium text-zinc-500">{t.modeSelector.privacy}</span>{" "}
+            {t.modeSelector.privacyDesc}
           </p>
         </div>
       </div>

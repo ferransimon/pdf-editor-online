@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DonateButton } from "@/components/donate-button";
 import { MobileWarning } from "@/components/mobile-warning";
+import { I18nProvider } from "@/i18n";
+import { LanguageSelector } from "@/components/language-selector";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,10 +42,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
-          <MobileWarning />
-          {children}
-          <DonateButton />
-          <ThemeToggle />
+          <I18nProvider>
+            <MobileWarning />
+            {children}
+            <DonateButton />
+            <LanguageSelector />
+            <ThemeToggle />
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

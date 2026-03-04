@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 interface Section {
   start: number;
@@ -25,11 +26,12 @@ export function SectionList({
   onRenameSection,
   onSelectSection,
 }: SectionListProps) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col h-full border-l border-zinc-200 bg-white w-72 shrink-0">
       <div className="px-4 py-3 border-b border-zinc-200 shrink-0">
         <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-          Secciones ({sections.length})
+          {t.sectionList.sections} ({sections.length})
         </p>
       </div>
 
@@ -38,8 +40,8 @@ export function SectionList({
           {sections.map((section, i) => {
             const pageLabel =
               section.start === section.end
-                ? `Pág. ${section.start + 1}`
-                : `Págs. ${section.start + 1}–${section.end + 1}`;
+                ? `${t.sectionList.pageSingular} ${section.start + 1}`
+                : `${t.sectionList.pagePlural} ${section.start + 1}–${section.end + 1}`;
 
             return (
               <div
@@ -54,7 +56,7 @@ export function SectionList({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-zinc-500">
-                    Sección {i + 1}
+                    {t.sectionList.section} {i + 1}
                   </span>
                   <Badge>{pageLabel}</Badge>
                 </div>
@@ -65,7 +67,7 @@ export function SectionList({
                     onRenameSection(i, e.target.value);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  placeholder={`Sección ${i + 1}`}
+                  placeholder={`${t.sectionList.section} ${i + 1}`}
                   className="h-7 text-xs"
                 />
               </div>

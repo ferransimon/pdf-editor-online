@@ -3,6 +3,7 @@
 import { Scissors } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n";
 
 interface Section {
   start: number;
@@ -26,6 +27,7 @@ export function SidebarThumbnails({
   onToggleSplit,
   onSelectSection,
 }: SidebarThumbnailsProps) {
+  const { t } = useI18n();
   const getSectionIndex = (pageIdx: number) =>
     sections.findIndex((s) => pageIdx >= s.start && pageIdx <= s.end);
 
@@ -33,7 +35,7 @@ export function SidebarThumbnails({
     <div className="flex flex-col h-full border-r border-zinc-200 bg-white w-56 shrink-0">
       <div className="px-4 py-3 border-b border-zinc-200 shrink-0">
         <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-          Páginas ({thumbnails.length})
+          {t.sidebar.pages(thumbnails.length)}
         </p>
       </div>
 
@@ -56,7 +58,7 @@ export function SidebarThumbnails({
                         ? "bg-zinc-900"
                         : "hover:bg-zinc-100"
                     )}
-                    title={hasSplitBefore ? "Quitar división" : "Dividir aquí"}
+                    title={hasSplitBefore ? t.sidebar.removeSplit : t.sidebar.splitHere}
                   >
                     {hasSplitBefore ? (
                       <div className="flex items-center gap-1.5 px-2">
@@ -67,7 +69,7 @@ export function SidebarThumbnails({
                       <div className="flex items-center gap-1.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Scissors className="h-3 w-3 text-zinc-400 shrink-0" />
                         <span className="text-[10px] text-zinc-400 leading-none">
-                          Dividir aquí
+                          {t.sidebar.splitHere}
                         </span>
                       </div>
                     )}
@@ -92,7 +94,7 @@ export function SidebarThumbnails({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={src}
-                        alt={`Página ${idx + 1}`}
+                        alt={t.sidebar.pageAlt(idx + 1)}
                         className="w-full h-auto block"
                       />
                     ) : (

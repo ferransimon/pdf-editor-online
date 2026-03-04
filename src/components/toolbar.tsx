@@ -2,6 +2,7 @@
 
 import { FileText, Download, RotateCcw, Loader2, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/i18n";
 
 interface ToolbarProps {
   pdfName: string;
@@ -18,6 +19,7 @@ export function Toolbar({
   onDownload,
   onReset,
 }: ToolbarProps) {
+  const { t } = useI18n();
   return (
     <header className="flex items-center gap-4 border-b border-zinc-200 bg-white px-6 h-14 shrink-0">
       <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -32,22 +34,22 @@ export function Toolbar({
 
       <div className="flex items-center gap-2">
         <span className="text-xs text-zinc-400">
-          {sectionCount} sección{sectionCount !== 1 ? "es" : ""}
+          {sectionCount} {sectionCount !== 1 ? t.toolbar.sectionPlural : t.toolbar.sectionSingular}
         </span>
         <Button variant="ghost" size="sm" onClick={onReset}>
           <RotateCcw className="h-3.5 w-3.5" />
-          Nuevo
+          {t.toolbar.new}
         </Button>
         <Button size="sm" onClick={onDownload} disabled={downloading}>
           {downloading ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Generando…
+              {t.toolbar.generating}
             </>
           ) : (
             <>
               <Download className="h-3.5 w-3.5" />
-              Descargar ZIP
+              {t.toolbar.downloadZip}
             </>
           )}
         </Button>
