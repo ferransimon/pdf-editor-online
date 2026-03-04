@@ -7,8 +7,9 @@ import {
   Pencil,
   Type,
   Square,
+  ImageIcon,
   Undo2,
-  Download,
+  Printer,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +20,7 @@ import type {
   DrawStroke,
   TextAnnotation,
   RectAnnotation,
+  ImageAnnotation,
 } from "@/lib/pdf-annotator";
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -73,6 +75,18 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
     y: number;
   } | null>(null);
 
+  // ── pending image (drag+resize before committing) ────────────────────────
+  const [pendingImage, setPendingImage] = useState<{
+    src: string;
+    bytes: Uint8Array;
+    mimeType: "image/png" | "image/jpeg";
+    x: number; // px top-left on canvas
+    y: number;
+    w: number; // px
+    h: number;
+    aspect: number; // w/h natural ratio (for aspect-locked resize)
+  } | null>(null);
+
   // ── canvas refs ────────────────────────────────────────────────────────
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -85,7 +99,15 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   const currentStrokePointsRef = useRef<{ x: number; y: number }[]>([]);
   const rectStartRef = useRef<{ x: number; y: number } | null>(null);
   const textDragRef = useRef<{ startPtrX: number; startPtrY: number; startElX: number; startElY: number } | null>(null);
-  // Stable ref to redrawOverlay — avoids forward-reference when renderCurrentPage calls it
+  const imgInteractionRef = useRef<{
+    mode: "move" | "nw" | "ne" | "sw" | "se";
+    startPtrX: number; startPtrY: number;
+    startX: number; startY: number; startW: number; startH: number;
+  } | null>(null);
+  // Cache of loaded HTMLImageElements keyed by dataUrl — for canvas drawing
+  const imageElCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  // Hidden file input for image upload
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const redrawOverlayRef = useRef<(pageIdx: number, extraAnn?: Annotation) => void>(() => {});
 
   // Mirror reactive state into refs so pointer handlers always read latest values
@@ -216,6 +238,17 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
           ann.h * canvas.height
         );
         ctx.restore();
+      } else if (ann.kind === "image") {
+        const el = imageElCacheRef.current.get(ann.dataUrl);
+        if (el?.complete) {
+          ctx.drawImage(
+            el,
+            ann.x * canvas.width,
+            ann.y * canvas.height,
+            ann.w * canvas.width,
+            ann.h * canvas.height
+          );
+        }
       }
     }
   }, []);
@@ -347,6 +380,51 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
     }
   };
 
+  const commitPendingImage = () => {
+    if (!pendingImage) return;
+    const canvas = bgCanvasRef.current!;
+    const ann: ImageAnnotation = {
+      kind: "image",
+      x: pendingImage.x / canvas.width,
+      y: pendingImage.y / canvas.height,
+      w: pendingImage.w / canvas.width,
+      h: pendingImage.h / canvas.height,
+      dataUrl: pendingImage.src,
+      bytes: pendingImage.bytes,
+      mimeType: pendingImage.mimeType,
+    };
+    addAnnotation(ann);
+    setPendingImage(null);
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!imageInputRef.current) return;
+    imageInputRef.current.value = "";
+    if (!file) return;
+    const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const arrayBuf = ev.target?.result as ArrayBuffer;
+      const bytes = new Uint8Array(arrayBuf);
+      const dataUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        imageElCacheRef.current.set(dataUrl, img);
+        const canvas = bgCanvasRef.current;
+        const maxW = canvas ? canvas.width * 0.6 : 300;
+        const aspect = img.naturalWidth / img.naturalHeight;
+        const w = Math.min(maxW, img.naturalWidth);
+        const h = w / aspect;
+        const x = canvas ? (canvas.width - w) / 2 : 0;
+        const y = canvas ? (canvas.height - h) / 2 : 0;
+        setPendingImage({ src: dataUrl, bytes, mimeType, x, y, w, h, aspect });
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   // ── text dialog handlers ────────────────────────────────────────────────
   const handleDialogSave = () => {
     if (!textDialogValue.trim()) { setTextDialogOpen(false); return; }
@@ -385,18 +463,124 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
     });
   };
 
-  // ── download ───────────────────────────────────────────────────────────
-  const handleDownload = async () => {
+  // ── print (renders all pages + annotations to canvas, opens print dialog) ──
+  const handlePrint = async () => {
     setDownloading(true);
     try {
-      const { applyAnnotations } = await import("@/lib/pdf-annotator");
-      const blob = await applyAnnotations(pdfBytes, annotations);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = pdfName.replace(/\.pdf$/i, "") + "-anotado.pdf";
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      const pdfjs = await import("pdfjs-dist");
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBytes.slice(0)) }).promise;
+
+      const dataUrls: string[] = [];
+
+      for (let i = 0; i < doc.numPages; i++) {
+        const page = await doc.getPage(i + 1);
+        const nativeVp = page.getViewport({ scale: 1 });
+        // 2× scale gives good print resolution without being enormous
+        const printScale = Math.min(3, 1600 / nativeVp.width);
+        const viewport = page.getViewport({ scale: printScale });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d")!;
+
+        // Render PDF page
+        await page.render({ canvasContext: ctx, canvas, viewport }).promise;
+
+        // Draw annotations on top — same logic as redrawOverlay
+        const anns = annotationsRef.current.get(i) ?? [];
+        for (const ann of anns) {
+          if (ann.kind === "draw") {
+            if (ann.points.length < 2) continue;
+            ctx.save();
+            ctx.beginPath();
+            ctx.strokeStyle = ann.color;
+            ctx.lineWidth = ann.normWidth * canvas.width;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            const pts = ann.points;
+            ctx.moveTo(pts[0].x * canvas.width, pts[0].y * canvas.height);
+            for (let j = 1; j < pts.length; j++) {
+              ctx.lineTo(pts[j].x * canvas.width, pts[j].y * canvas.height);
+            }
+            ctx.stroke();
+            ctx.restore();
+          } else if (ann.kind === "text") {
+            ctx.save();
+            ctx.fillStyle = ann.color;
+            const pxSize = ann.fontSize * printScale;
+            ctx.font = `${pxSize}px sans-serif`;
+            ann.text.split("\n").forEach((line, li) => {
+              ctx.fillText(line, ann.x * canvas.width, ann.y * canvas.height + li * pxSize * 1.25);
+            });
+            ctx.restore();
+          } else if (ann.kind === "rect") {
+            ctx.save();
+            ctx.strokeStyle = ann.color;
+            ctx.fillStyle = ann.color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.15;
+            ctx.fillRect(ann.x * canvas.width, ann.y * canvas.height, ann.w * canvas.width, ann.h * canvas.height);
+            ctx.globalAlpha = 1;
+            ctx.strokeRect(ann.x * canvas.width, ann.y * canvas.height, ann.w * canvas.width, ann.h * canvas.height);
+            ctx.restore();
+          } else if (ann.kind === "image") {
+            const el = imageElCacheRef.current.get(ann.dataUrl);
+            if (el?.complete) {
+              ctx.drawImage(el, ann.x * canvas.width, ann.y * canvas.height, ann.w * canvas.width, ann.h * canvas.height);
+            }
+          }
+        }
+
+        dataUrls.push(canvas.toDataURL("image/png"));
+      }
+
+      // Build print-only HTML page
+      const win = window.open("", "_blank");
+      if (!win) {
+        alert("Activa las ventanas emergentes para poder imprimir.");
+        return;
+      }
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${pdfName.replace(/\.pdf$/i, "")} — imprimir</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: #525659; }
+    .page {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      page-break-after: always;
+    }
+    .page:last-child { page-break-after: avoid; }
+    img {
+      display: block;
+      max-width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+    }
+    @media print {
+      html, body { background: white; }
+      .page { padding: 0; }
+      img { box-shadow: none; width: 100%; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("\n")}
+<script>
+  window.addEventListener("load", () => window.print());
+</script>
+</body>
+</html>`;
+
+      win.document.write(html);
+      win.document.close();
     } finally {
       setDownloading(false);
     }
@@ -457,6 +641,23 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
               <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
+
+          {/* Image button — opens file picker directly */}
+          <button
+            title="Insertar imagen"
+            onClick={() => imageInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-600 hover:bg-zinc-100 transition-colors"
+          >
+            <ImageIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Imagen</span>
+          </button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            className="sr-only"
+            onChange={handleImageFileChange}
+          />
         </div>
 
         <div className="h-4 w-px bg-zinc-200" />
@@ -552,13 +753,13 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
           <span className="hidden sm:inline">Deshacer</span>
         </button>
 
-        <Button onClick={handleDownload} disabled={downloading} size="sm" className="gap-1.5">
+        <Button onClick={handlePrint} disabled={downloading} size="sm" className="gap-1.5">
           {downloading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Download className="h-4 w-4" />
+            <Printer className="h-4 w-4" />
           )}
-          Descargar
+          Imprimir
         </Button>
       </div>
 
@@ -596,7 +797,7 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
                 className={`absolute inset-0 ${cursorClass}`}
                 style={{
                   touchAction: "none",
-                  pointerEvents: pageLoading || !!pendingText ? "none" : "auto",
+                  pointerEvents: pageLoading || !!pendingText || !!pendingImage ? "none" : "auto",
                   opacity: pageLoading ? 0 : 1,
                 }}
                 onPointerDown={handlePointerDown}
@@ -667,6 +868,127 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
                     <button
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => setPendingText(null)}
+                      className="px-3 py-1 rounded-md text-xs font-medium bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 shadow"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Draggable + resizable pending image */}
+              {pendingImage && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: pendingImage.x,
+                    top: pendingImage.y,
+                    width: pendingImage.w,
+                    height: pendingImage.h,
+                    zIndex: 50,
+                    userSelect: "none",
+                    touchAction: "none",
+                  }}
+                  onPointerDown={(e) => {
+                    // Only drag from the image body (not handles)
+                    if ((e.target as HTMLElement).dataset.handle) return;
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    imgInteractionRef.current = {
+                      mode: "move",
+                      startPtrX: e.clientX, startPtrY: e.clientY,
+                      startX: pendingImage.x, startY: pendingImage.y,
+                      startW: pendingImage.w, startH: pendingImage.h,
+                    };
+                  }}
+                  onPointerMove={(e) => {
+                    const ref = imgInteractionRef.current;
+                    if (!ref) return;
+                    const dx = e.clientX - ref.startPtrX;
+                    const dy = e.clientY - ref.startPtrY;
+                    const MIN = 40;
+                    setPendingImage((prev) => {
+                      if (!prev) return null;
+                      if (ref.mode === "move") {
+                        return { ...prev, x: ref.startX + dx, y: ref.startY + dy };
+                      }
+                      // Resize: compute new rect keeping opposite corner fixed
+                      let { x, y, w, h } = { x: ref.startX, y: ref.startY, w: ref.startW, h: ref.startH };
+                      if (ref.mode === "se") {
+                        w = Math.max(MIN, ref.startW + dx);
+                        h = w / prev.aspect;
+                      } else if (ref.mode === "sw") {
+                        w = Math.max(MIN, ref.startW - dx);
+                        h = w / prev.aspect;
+                        x = ref.startX + ref.startW - w;
+                      } else if (ref.mode === "ne") {
+                        w = Math.max(MIN, ref.startW + dx);
+                        h = w / prev.aspect;
+                        y = ref.startY + ref.startH - h;
+                      } else if (ref.mode === "nw") {
+                        w = Math.max(MIN, ref.startW - dx);
+                        h = w / prev.aspect;
+                        x = ref.startX + ref.startW - w;
+                        y = ref.startY + ref.startH - h;
+                      }
+                      return { ...prev, x, y, w, h };
+                    });
+                  }}
+                  onPointerUp={() => { imgInteractionRef.current = null; }}
+                >
+                  {/* Image preview */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={pendingImage.src}
+                    alt=""
+                    draggable={false}
+                    style={{ width: "100%", height: "100%", objectFit: "fill",
+                      display: "block", border: "2px dashed rgba(0,0,0,0.5)",
+                      boxSizing: "border-box", cursor: "grab" }}
+                  />
+
+                  {/* Resize handles */}
+                  {(["nw","ne","sw","se"] as const).map((corner) => (
+                    <div
+                      key={corner}
+                      data-handle={corner}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        imgInteractionRef.current = {
+                          mode: corner,
+                          startPtrX: e.clientX, startPtrY: e.clientY,
+                          startX: pendingImage.x, startY: pendingImage.y,
+                          startW: pendingImage.w, startH: pendingImage.h,
+                        };
+                      }}
+                      style={{
+                        position: "absolute",
+                        width: 12, height: 12,
+                        background: "white",
+                        border: "2px solid #333",
+                        borderRadius: 2,
+                        cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                        ...(corner.includes("n") ? { top: -6 } : { bottom: -6 }),
+                        ...(corner.includes("w") ? { left: -6 } : { right: -6 }),
+                        zIndex: 51,
+                      }}
+                    />
+                  ))}
+
+                  {/* Action buttons */}
+                  <div
+                    style={{ position: "absolute", bottom: -36, left: 0, display: "flex", gap: 6 }}
+                  >
+                    <button
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={commitPendingImage}
+                      className="px-3 py-1 rounded-md text-xs font-medium bg-zinc-900 text-white hover:bg-zinc-700 shadow"
+                    >
+                      Confirmar
+                    </button>
+                    <button
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => setPendingImage(null)}
                       className="px-3 py-1 rounded-md text-xs font-medium bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 shadow"
                     >
                       Cancelar

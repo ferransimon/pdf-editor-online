@@ -31,7 +31,18 @@ export type RectAnnotation = {
   color: string;
 };
 
-export type Annotation = DrawStroke | TextAnnotation | RectAnnotation;
+export type ImageAnnotation = {
+  kind: "image";
+  x: number; // normalised top-left
+  y: number;
+  w: number; // normalised width
+  h: number; // normalised height
+  dataUrl: string;    // for canvas redraw
+  bytes: Uint8Array;  // original file bytes for pdf-lib embedding
+  mimeType: "image/png" | "image/jpeg";
+};
+
+export type Annotation = DrawStroke | TextAnnotation | RectAnnotation | ImageAnnotation;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,7 +65,7 @@ export async function applyAnnotations(
   originalBytes: ArrayBuffer,
   pageAnnotations: Map<number, Annotation[]>
 ): Promise<Blob> {
-  const pdfDoc = await PDFDocument.load(originalBytes.slice(0));
+  const pdfDoc = await PDFDocument.load(originalBytes.slice(0), { ignoreEncryption: true });
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
 
@@ -112,6 +123,16 @@ export async function applyAnnotations(
           borderWidth: 2,
           color: hexToRgb(ann.color),
           opacity: 0.15,
+        });
+      } else if (ann.kind === "image") {
+        const imgEmbed = ann.mimeType === "image/png"
+          ? await pdfDoc.embedPng(ann.bytes)
+          : await pdfDoc.embedJpg(ann.bytes);
+        page.drawImage(imgEmbed, {
+          x: ann.x * pw,
+          y: ph - ann.y * ph - ann.h * ph,
+          width: ann.w * pw,
+          height: ann.h * ph,
         });
       }
     }

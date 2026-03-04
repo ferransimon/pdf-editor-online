@@ -5,6 +5,7 @@ import {
   useCallback,
   useRef,
   useId,
+  useEffect,
 } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -15,6 +16,9 @@ import {
   X,
   Plus,
   GripVertical,
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +46,11 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── page preview state ────────────────────────────────────────────────────
+  const [previewIdx, setPreviewIdx] = useState<number | null>(null);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   // D&D state
   const dragIdx = useRef<number | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
@@ -50,6 +59,41 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   // Stable snapshot of insertion-point {x,y} positions taken once at drag start
   const slotPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
+
+  // ── open preview (renders high-res on demand) ────────────────────────────
+  const openPreview = useCallback(async (idx: number) => {
+    setPreviewIdx(idx);
+    setPreviewDataUrl(null);
+    setPreviewLoading(true);
+    try {
+      const page = pages[idx];
+      const { loadPdfDocument, renderPageToDataUrl } = await import("@/lib/pdf-renderer");
+      const src = sources[page.sourceIndex];
+      const doc = await loadPdfDocument(src.bytes);
+      const url = await renderPageToDataUrl(doc, page.pageIndex + 1, 2.0);
+      doc.destroy();
+      setPreviewDataUrl(url);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [pages, sources]);
+
+  const closePreview = useCallback(() => {
+    setPreviewIdx(null);
+    setPreviewDataUrl(null);
+  }, []);
+
+  // Keyboard: Escape closes, arrows navigate
+  useEffect(() => {
+    if (previewIdx === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { closePreview(); return; }
+      if (e.key === "ArrowLeft"  && previewIdx > 0)               openPreview(previewIdx - 1);
+      if (e.key === "ArrowRight" && previewIdx < pages.length - 1) openPreview(previewIdx + 1);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [previewIdx, pages.length, openPreview, closePreview]);
 
   const activateSlot = (slot: number | null) => {
     activeSlotRef.current = slot;
@@ -467,6 +511,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
                       draggable
                       onDragStart={(e) => handlePageDragStart(e, realIdx)}
                       onDragEnd={handlePageDragEnd}
+                      onDoubleClick={(e) => { e.stopPropagation(); openPreview(realIdx); }}
                       style={{ viewTransitionName: page.id }}
                       className="group relative flex flex-col rounded-lg border-2 border-zinc-200 bg-white overflow-hidden cursor-grab active:cursor-grabbing select-none hover:border-zinc-300 hover:shadow-sm transition-shadow"
                     >
@@ -485,7 +530,7 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
                       </button>
 
                       {/* Thumbnail */}
-                      <div className="w-full aspect-3/4 bg-zinc-100">
+                      <div className="relative w-full aspect-3/4 bg-zinc-100">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={page.thumbnail}
@@ -493,6 +538,12 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
                           className="w-full h-full object-contain"
                           draggable={false}
                         />
+                        {/* Zoom hint */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <div className="bg-black/40 rounded-full p-1.5">
+                            <ZoomIn className="h-4 w-4 text-white" />
+                          </div>
+                        </div>
                       </div>
 
                       {/* Footer */}
@@ -512,6 +563,71 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
           })()
         )}
       </div>
+
+      {/* ── Page preview modal ── */}
+      {previewIdx !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm"
+          onClick={closePreview}
+        >
+          {/* Close button */}
+          <button
+            onClick={closePreview}
+            className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 p-2 transition-colors"
+          >
+            <X className="h-5 w-5 text-white" />
+          </button>
+
+          {/* Prev */}
+          {previewIdx > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); openPreview(previewIdx - 1); }}
+              className="absolute left-4 rounded-full bg-white/10 hover:bg-white/20 p-3 transition-colors"
+            >
+              <ChevronLeft className="h-6 w-6 text-white" />
+            </button>
+          )}
+
+          {/* Page image */}
+          <div
+            className="flex items-center justify-center max-h-[90vh] max-w-[85vw]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {previewLoading || !previewDataUrl ? (
+              <div className="flex flex-col items-center gap-3 text-white">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="text-sm">Cargando…</span>
+              </div>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewDataUrl}
+                alt={`Vista previa pág. ${previewIdx + 1}`}
+                className="max-h-[90vh] max-w-[85vw] object-contain shadow-2xl rounded"
+                draggable={false}
+              />
+            )}
+          </div>
+
+          {/* Next */}
+          {previewIdx < pages.length - 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); openPreview(previewIdx + 1); }}
+              className="absolute right-4 rounded-full bg-white/10 hover:bg-white/20 p-3 transition-colors"
+            >
+              <ChevronRight className="h-6 w-6 text-white" />
+            </button>
+          )}
+
+          {/* Page counter */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-3 py-1.5 rounded-full">
+            Pág. {previewIdx + 1} / {pages.length}
+            {pages[previewIdx] && (
+              <span className="ml-2 opacity-60">{pages[previewIdx].sourceName}</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

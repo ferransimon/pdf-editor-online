@@ -14,7 +14,7 @@ export async function splitPdf(
 ): Promise<SplitResult[]> {
   const { PDFDocument } = await import("pdf-lib");
   // Slice to ensure we have a fresh, non-detached buffer to load from.
-  const srcDoc = await PDFDocument.load(originalBytes.slice(0));
+  const srcDoc = await PDFDocument.load(originalBytes.slice(0), { ignoreEncryption: true });
 
   const results: SplitResult[] = [];
   for (const section of sections) {

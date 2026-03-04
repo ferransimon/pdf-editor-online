@@ -18,7 +18,7 @@ export async function mergePages(
   const { PDFDocument } = await import("pdf-lib");
 
   const srcDocs = await Promise.all(
-    sources.map((s) => PDFDocument.load(s.bytes.slice(0)))
+    sources.map((s) => PDFDocument.load(s.bytes.slice(0), { ignoreEncryption: true }))
   );
 
   const outDoc = await PDFDocument.create();
