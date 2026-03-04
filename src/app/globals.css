@@ -21,3 +21,17 @@ body {
 * {
   box-sizing: border-box;
 }
+
+/* View Transitions: smooth card reorder animation */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.25, 0, 0, 1);
+}
+

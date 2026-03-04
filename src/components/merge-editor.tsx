@@ -5,8 +5,8 @@ import {
   useCallback,
   useRef,
   useId,
-  Fragment,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   Upload,
   Loader2,
@@ -22,6 +22,11 @@ import { cn } from "@/lib/utils";
 import type { MergePage, MergeSource } from "@/lib/pdf-merger";
 
 type SubPhase = "idle" | "loading" | "editing";
+
+/** Activate drop slot when cursor enters within this radius of its center */
+const ACTIVATE_THRESHOLD = 80;
+/** Keep the active slot open until cursor moves beyond this radius */
+const DEACTIVATE_THRESHOLD = 130;
 
 interface MergeEditorProps {
   onBack: () => void;
@@ -40,11 +45,21 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
   // D&D state
   const dragIdx = useRef<number | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<number | null>(null);
-  const [isDraggingPage, setIsDraggingPage] = useState(false);
+  // Ref mirror so handlers always read the latest slot without stale closures
+  const activeSlotRef = useRef<number | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Stable snapshot of insertion-point {x,y} positions taken once at drag start
+  const slotPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
 
-  const uid = useId();
+  const activateSlot = (slot: number | null) => {
+    activeSlotRef.current = slot;
+    setDragOverSlot(slot);
+  };
+
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const idCounter = useRef(0);
-  const nextId = () => `${uid}-${idCounter.current++}`;
+  // CSS-safe id: starts with a letter, only alphanumeric+dash
+  const nextId = () => `pg${uid}${idCounter.current++}`;
 
   // ── load files ────────────────────────────────────────────────────────────
   const loadFiles = useCallback(
@@ -124,43 +139,115 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
   };
 
   // ── page D&D reorder ──────────────────────────────────────────────────────
+
   const handlePageDragStart = (e: React.DragEvent, idx: number) => {
     dragIdx.current = idx;
     e.dataTransfer.effectAllowed = "move";
-    setIsDraggingPage(true);
+    // Snapshot card positions BEFORE any DOM mutation.
+    // Each card's left edge = slot before it; last card's right edge = slot after all.
+    if (gridRef.current) {
+      const cards = Array.from(
+        gridRef.current.querySelectorAll<HTMLElement>("[data-card-idx]")
+      );
+      const positions = cards.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left, y: r.top + r.height / 2 };
+      });
+      const last = cards.at(-1);
+      if (last) {
+        const r = last.getBoundingClientRect();
+        positions.push({ x: r.right, y: r.top + r.height / 2 });
+      }
+      slotPositionsRef.current = positions;
+    }
+    gridRef.current?.setAttribute("data-dragging", "true");
   };
 
   const handlePageDragEnd = () => {
     dragIdx.current = null;
-    setDragOverSlot(null);
-    setIsDraggingPage(false);
+    activateSlot(null);
+    gridRef.current?.removeAttribute("data-dragging");
   };
 
-  const handleSlotDragOver = (e: React.DragEvent, slot: number) => {
+  // Single handler on the grid — uses stable position snapshot for hysteresis
+  const handleGridDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    setDragOverSlot(slot);
+    if (dragIdx.current === null) return;
+
+    const positions = slotPositionsRef.current;
+    const current = activeSlotRef.current;
+
+    let closestSlot: number | null = null;
+    let closestDist = Infinity;
+    positions.forEach(({ x, y }, slot) => {
+      const dist = Math.hypot(e.clientX - x, e.clientY - y);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestSlot = slot;
+      }
+    });
+
+    let next: number | null;
+    if (closestSlot !== null && closestDist < ACTIVATE_THRESHOLD) {
+      next = closestSlot;
+    } else if (current !== null) {
+      const pos = positions[current];
+      if (pos) {
+        const distToCurrent = Math.hypot(e.clientX - pos.x, e.clientY - pos.y);
+        next = distToCurrent < DEACTIVATE_THRESHOLD ? current : null;
+      } else {
+        next = null;
+      }
+    } else {
+      next = null;
+    }
+
+    if (next !== current) activateSlot(next);
   };
 
-  const handleSlotDrop = (e: React.DragEvent, slot: number) => {
+  const handleGridDragLeave = (e: React.DragEvent) => {
+    if (!gridRef.current?.contains(e.relatedTarget as Node)) {
+      activateSlot(null);
+    }
+  };
+
+  const handleGridDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const from = dragIdx.current;
-    if (from === null) return;
-    setPages((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      // After removing, the insertion index shifts if from < slot
-      const insertAt = from < slot ? slot - 1 : slot;
-      next.splice(insertAt, 0, moved);
-      return next;
-    });
+    const slot = activeSlotRef.current;
+    if (from === null || slot === null) return;
+
     dragIdx.current = null;
-    setDragOverSlot(null);
-    setIsDraggingPage(false);
+    activateSlot(null);
+    gridRef.current?.removeAttribute("data-dragging");
+
+    const reorder = () => {
+      setPages((prev) => {
+        const next = [...prev];
+        const [moved] = next.splice(from, 1);
+        const insertAt = from < slot ? slot - 1 : slot;
+        next.splice(insertAt, 0, moved);
+        return next;
+      });
+    };
+
+    if (typeof document !== "undefined" && "startViewTransition" in document) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document as any).startViewTransition(() => { flushSync(reorder); });
+    } else {
+      reorder();
+    }
   };
 
   const removePage = (idx: number) => {
-    setPages((prev) => prev.filter((_, i) => i !== idx));
+    const doRemove = () => setPages((prev) => prev.filter((_, i) => i !== idx));
+    if (typeof document !== "undefined" && "startViewTransition" in document) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document as any).startViewTransition(() => flushSync(doRemove));
+    } else {
+      doRemove();
+    }
   };
 
   // ── download ──────────────────────────────────────────────────────────────
@@ -324,113 +411,107 @@ export function MergeEditor({ onBack }: MergeEditorProps) {
             </Button>
           </div>
         ) : (
-          <div className="flex flex-wrap content-start gap-3">
-            {/* Slot BEFORE first card */}
-            <DropSlot
-              slot={0}
-              active={dragOverSlot === 0}
-              visible={isDraggingPage}
-              onDragOver={(e) => handleSlotDragOver(e, 0)}
-              onDragLeave={() => setDragOverSlot(null)}
-              onDrop={(e) => handleSlotDrop(e, 0)}
-            />
+          (() => {
+            // Build display array: remove dragged card, insert placeholder at active slot.
+            // When no slot is active, show all cards normally (dragged card fades via CSS).
+            const dragFrom = dragIdx.current;
+            type DI =
+              | { kind: "card"; page: MergePage; realIdx: number }
+              | { kind: "placeholder" };
 
-            {pages.map((page, idx) => (
-              <Fragment key={page.id}>
-                {/* Card */}
-                <div
-                  key={page.id}
-                  draggable
-                  onDragStart={(e) => handlePageDragStart(e, idx)}
-                  onDragEnd={handlePageDragEnd}
-                  className={cn(
-                    "group relative flex flex-col w-36 shrink-0 rounded-lg border-2 bg-white overflow-hidden cursor-grab active:cursor-grabbing transition-opacity select-none",
-                    isDraggingPage && dragIdx.current === idx
-                      ? "opacity-30 border-zinc-200"
-                      : "opacity-100 border-zinc-200 hover:border-zinc-300 hover:shadow-sm"
-                  )}
-                >
-                  {/* Grip */}
-                  <div className="absolute top-1.5 left-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <GripVertical className="h-3.5 w-3.5 text-zinc-400" />
-                  </div>
+            let items: DI[];
+            if (dragOverSlot !== null && dragFrom !== null) {
+              const withoutDragged: DI[] = pages
+                .map((page, i) => ({ kind: "card" as const, page, realIdx: i }))
+                .filter((_, i) => i !== dragFrom);
+              // Slot numbers reference the original pages array;
+              // adjust index after removing the dragged card.
+              const insertIdx =
+                dragOverSlot <= dragFrom ? dragOverSlot : dragOverSlot - 1;
+              items = [
+                ...withoutDragged.slice(0, insertIdx),
+                { kind: "placeholder" },
+                ...withoutDragged.slice(insertIdx),
+              ];
+            } else {
+              items = pages.map((page, i) => ({
+                kind: "card" as const,
+                page,
+                realIdx: i,
+              }));
+            }
 
-                  {/* Remove */}
-                  <button
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => { e.stopPropagation(); removePage(idx); }}
-                    className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 rounded-full bg-white border border-zinc-200 p-0.5 hover:bg-red-50 hover:border-red-200"
-                  >
-                    <X className="h-2.5 w-2.5 text-zinc-500 hover:text-red-500" />
-                  </button>
+            return (
+              <div
+                ref={gridRef}
+                className="grid gap-3"
+                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(144px, 1fr))" }}
+                onDragOver={handleGridDragOver}
+                onDragLeave={handleGridDragLeave}
+                onDrop={handleGridDrop}
+              >
+                {items.map((item, displayIdx) => {
+                  if (item.kind === "placeholder") {
+                    return (
+                      <div
+                        key="placeholder"
+                        className="rounded-lg border-2 border-dashed border-zinc-400 bg-zinc-100 aspect-3/4 animate-pulse"
+                      />
+                    );
+                  }
+                  const { page, realIdx } = item;
+                  return (
+                    <div
+                      key={page.id}
+                      data-card-idx={realIdx}
+                      draggable
+                      onDragStart={(e) => handlePageDragStart(e, realIdx)}
+                      onDragEnd={handlePageDragEnd}
+                      style={{ viewTransitionName: page.id }}
+                      className="group relative flex flex-col rounded-lg border-2 border-zinc-200 bg-white overflow-hidden cursor-grab active:cursor-grabbing select-none hover:border-zinc-300 hover:shadow-sm transition-shadow"
+                    >
+                      {/* Grip */}
+                      <div className="absolute top-1.5 left-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <GripVertical className="h-3.5 w-3.5 text-zinc-400" />
+                      </div>
 
-                  {/* Thumbnail */}
-                  <div className="w-full aspect-3/4 bg-zinc-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={page.thumbnail}
-                      alt={`Página ${idx + 1}`}
-                      className="w-full h-full object-contain"
-                      draggable={false}
-                    />
-                  </div>
+                      {/* Remove */}
+                      <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); removePage(realIdx); }}
+                        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 rounded-full bg-white border border-zinc-200 p-0.5 hover:bg-red-50 hover:border-red-200"
+                      >
+                        <X className="h-2.5 w-2.5 text-zinc-500 hover:text-red-500" />
+                      </button>
 
-                  {/* Footer */}
-                  <div className="flex flex-col gap-0.5 px-2 py-1.5 border-t border-zinc-100">
-                    <span className="text-[10px] font-medium text-zinc-700 leading-none">
-                      Pág. {idx + 1}
-                    </span>
-                    <span className="text-[9px] text-zinc-400 leading-none truncate" title={page.sourceName}>
-                      {page.sourceName}
-                    </span>
-                  </div>
-                </div>
+                      {/* Thumbnail */}
+                      <div className="w-full aspect-3/4 bg-zinc-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={page.thumbnail}
+                          alt={`Página ${displayIdx + 1}`}
+                          className="w-full h-full object-contain"
+                          draggable={false}
+                        />
+                      </div>
 
-                {/* Slot AFTER this card */}
-                <DropSlot
-                  key={`slot-${idx + 1}`}
-                  slot={idx + 1}
-                  active={dragOverSlot === idx + 1}
-                  visible={isDraggingPage}
-                  onDragOver={(e) => handleSlotDragOver(e, idx + 1)}
-                  onDragLeave={() => setDragOverSlot(null)}
-                  onDrop={(e) => handleSlotDrop(e, idx + 1)}
-                />
-              </Fragment>
-            ))}
-          </div>
+                      {/* Footer */}
+                      <div className="flex flex-col gap-0.5 px-2 py-1.5 border-t border-zinc-100">
+                        <span className="text-[10px] font-medium text-zinc-700 leading-none">
+                          Pág. {displayIdx + 1}
+                        </span>
+                        <span className="text-[9px] text-zinc-400 leading-none truncate" title={page.sourceName}>
+                          {page.sourceName}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
         )}
       </div>
     </div>
-  );
-}
-
-// ── DropSlot ─────────────────────────────────────────────────────────────────
-// A thin insertion zone between page cards that expands when dragged over.
-
-interface DropSlotProps {
-  slot: number;
-  active: boolean;
-  visible: boolean;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: () => void;
-  onDrop: (e: React.DragEvent) => void;
-}
-
-function DropSlot({ active, visible, onDragOver, onDragLeave, onDrop }: DropSlotProps) {
-  if (!visible) return null;
-
-  return (
-    <div
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      className={cn(
-        "shrink-0 rounded-lg border-2 border-dashed transition-all duration-150 self-stretch",
-        active
-          ? "w-36 border-zinc-900 bg-zinc-100"
-          : "w-3 border-zinc-300 bg-zinc-50 opacity-60"
-      )}
-    />
   );
 }
