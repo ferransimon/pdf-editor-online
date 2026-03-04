@@ -1,6 +1,6 @@
 "use client";
 
-import { Scissors, Merge, PenLine } from "lucide-react";
+import { Scissors, Merge, PenLine, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ModeSelectorProps {
@@ -41,6 +41,15 @@ export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps
             description="Añade texto, dibujos y formas sobre las páginas"
             onClick={onAnnotate}
           />
+        </div>
+
+        {/* Privacy disclaimer */}
+        <div className="flex items-start gap-2.5 rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-left w-full">
+          <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-zinc-400" />
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            <span className="font-medium text-zinc-500">100% privado.</span>{" "}
+            Todos los archivos se procesan directamente en tu navegador. Ningún PDF es enviado ni almacenado en ningún servidor.
+          </p>
         </div>
       </div>
     </div>
