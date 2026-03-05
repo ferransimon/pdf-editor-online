@@ -14,26 +14,28 @@ export async function splitPdf(
 ): Promise<SplitResult[]> {
   const { PDFDocument } = await import("pdf-lib");
 
-  // Load source with pdf-lib to copy pages directly (no rasterisation).
-  // This preserves text, vectors and original compression, keeping file sizes small.
-  const srcDoc = await PDFDocument.load(originalBytes, { ignoreEncryption: true });
-
   const results: SplitResult[] = [];
 
   for (const section of sections) {
-    const newDoc  = await PDFDocument.create();
-    const copied  = await newDoc.copyPages(srcDoc, section.pages);
-    for (const page of copied) {
-      // Some PDFs have a CropBox smaller than the MediaBox (the visible area is a
-      // sub-region of the physical page). pdf-lib may not inherit a CropBox that
-      // lives in a parent page-tree node, which causes the full MediaBox to be
-      // shown and content outside the original crop to become visible — or content
-      // inside the crop to appear blank. Promoting CropBox → MediaBox fixes this.
-      promoteCropBox(page);
-      newDoc.addPage(page);
+    // Load a fresh copy of the original for every section and *remove* the pages
+    // that don't belong to it. This is much more space-efficient than creating a
+    // new document and copying pages in, because:
+    //   • All shared resources (fonts, images, ICC profiles) are preserved as-is
+    //     without duplication — copyPages clones resource dictionaries per page.
+    //   • CropBox / MediaBox / TrimBox attributes are never touched, so page
+    //     geometry is always correct without any post-processing.
+    const doc = await PDFDocument.load(originalBytes, { ignoreEncryption: true });
+    const totalPages = doc.getPageCount();
+    const keepSet = new Set(section.pages);
+
+    // Iterate from the last page backwards so removal doesn't shift indices.
+    for (let i = totalPages - 1; i >= 0; i--) {
+      if (!keepSet.has(i)) {
+        doc.removePage(i);
+      }
     }
 
-    const bytes    = await newDoc.save();
+    const bytes    = await doc.save({ useObjectStreams: true });
     const safeName = section.name.endsWith(".pdf")
       ? section.name
       : `${section.name}.pdf`;
@@ -45,18 +47,4 @@ export async function splitPdf(
   }
 
   return results;
-}
-
-/** Promotes CropBox to MediaBox so the visible page area is always correct. */
-function promoteCropBox(page: import("pdf-lib").PDFPage): void {
-  const mb = page.getMediaBox();
-  const cb = page.getCropBox();
-  if (
-    cb.x !== mb.x ||
-    cb.y !== mb.y ||
-    cb.width !== mb.width ||
-    cb.height !== mb.height
-  ) {
-    page.setMediaBox(cb.x, cb.y, cb.width, cb.height);
-  }
 }

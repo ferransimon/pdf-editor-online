@@ -38,7 +38,9 @@ export async function mergePages(
     outDoc.addPage(copiedPage);
   }
 
-  const bytes = await outDoc.save();
+  // useObjectStreams compresses the cross-reference table and object headers
+  // (PDF 1.5 object streams), reducing the structural overhead of the output.
+  const bytes = await outDoc.save({ useObjectStreams: true });
   return new Blob([bytes], { type: "application/pdf" });
 }
 
