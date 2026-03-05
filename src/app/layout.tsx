@@ -8,6 +8,7 @@ import { MobileWarning } from "@/components/mobile-warning";
 import { I18nProvider } from "@/i18n";
 import { LanguageSelector } from "@/components/language-selector";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -129,6 +130,7 @@ export default function RootLayout({
           </I18nProvider>
         </ThemeProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
