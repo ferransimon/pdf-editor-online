@@ -20,53 +20,38 @@ export async function mergePages(
   pageOrder: MergePage[]
 ): Promise<Blob> {
   const { PDFDocument } = await import("pdf-lib");
-  const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-  // Load every source PDF in pdfjs so we can render pages accurately.
-  // pdfjs resolves CropBox / TrimBox / rotation — the rendered output is
-  // exactly what the user sees in the editor.
-  const pdfjsDocs = await Promise.all(
-    sources.map((s) =>
-      pdfjs.getDocument({ data: new Uint8Array(s.bytes.slice(0)) }).promise
-    )
+  // Load every source PDF with pdf-lib so we can copy pages directly.
+  // Copying pages preserves text, vectors and original compression,
+  // keeping file sizes close to the originals.
+  const srcDocs = await Promise.all(
+    sources.map((s) => PDFDocument.load(s.bytes, { ignoreEncryption: true }))
   );
 
   const outDoc = await PDFDocument.create();
 
   for (const mp of pageOrder) {
-    const pdfjsPage = await pdfjsDocs[mp.sourceIndex].getPage(mp.pageIndex + 1);
-
-    // Scale that keeps the output at ~144 dpi (2× the 72 pt/inch PDF unit).
-    const PRINT_SCALE = 2;
-    const viewport = pdfjsPage.getViewport({ scale: PRINT_SCALE });
-
-    // Render to an offscreen canvas.
-    const canvas = document.createElement("canvas");
-    canvas.width  = Math.round(viewport.width);
-    canvas.height = Math.round(viewport.height);
-    const ctx = canvas.getContext("2d")!;
-    await pdfjsPage.render({ canvasContext: ctx, canvas, viewport }).promise;
-
-    // Convert to PNG bytes.
-    const dataUrl  = canvas.toDataURL("image/png");
-    const b64      = dataUrl.split(",")[1];
-    const imgBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-
-    // Create a new PDF page whose size matches the pdfjs-resolved viewport
-    // in PDF units (at scale 1 == 72 dpi == 1 pt).
-    const nativeVp  = pdfjsPage.getViewport({ scale: 1 });
-    const pdfPage   = outDoc.addPage([nativeVp.width, nativeVp.height]);
-    const embedded  = await outDoc.embedPng(imgBytes);
-    pdfPage.drawImage(embedded, {
-      x: 0, y: 0,
-      width:  nativeVp.width,
-      height: nativeVp.height,
-    });
+    const [copiedPage] = await outDoc.copyPages(srcDocs[mp.sourceIndex], [mp.pageIndex]);
+    // Promote CropBox → MediaBox to avoid blank/misaligned pages when the PDF
+    // has a CropBox smaller than the MediaBox (inherited from the page tree).
+    promoteCropBox(copiedPage);
+    outDoc.addPage(copiedPage);
   }
-
-  await Promise.all(pdfjsDocs.map((d) => d.destroy()));
 
   const bytes = await outDoc.save();
   return new Blob([bytes], { type: "application/pdf" });
+}
+
+/** Promotes CropBox to MediaBox so the visible page area is always correct. */
+function promoteCropBox(page: import("pdf-lib").PDFPage): void {
+  const mb = page.getMediaBox();
+  const cb = page.getCropBox();
+  if (
+    cb.x !== mb.x ||
+    cb.y !== mb.y ||
+    cb.width !== mb.width ||
+    cb.height !== mb.height
+  ) {
+    page.setMediaBox(cb.x, cb.y, cb.width, cb.height);
+  }
 }
