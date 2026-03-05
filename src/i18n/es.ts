@@ -108,4 +108,39 @@ export const es: Translations = {
     toLight: "Cambiar a modo claro",
     toDark: "Cambiar a modo oscuro",
   },
+  privacy: {
+    link: "Pol\u00edtica de privacidad",
+    title: "Pol\u00edtica de Privacidad",
+    lastUpdated: "\u00daltima actualizaci\u00f3n: 5 de marzo de 2026",
+    intro:
+      "Esta pol\u00edtica de privacidad explica qu\u00e9 datos se recopilan cuando usas PDF Editor Online y c\u00f3mo se utilizan.",
+    section1Title: "1. Procesamiento local de archivos",
+    section1Body:
+      "Todas las operaciones con PDFs (dividir, unir, anotar) se realizan \u00edntegramente en tu navegador. Tus archivos nunca se suben a ning\u00fan servidor. No tenemos acceso a los documentos que procesas.",
+    section2Title: "2. Anal\u00edtica (Vercel Analytics)",
+    section2Body:
+      "Utilizamos Vercel Analytics para entender c\u00f3mo se usa la aplicaci\u00f3n. Este servicio funciona en modo sin cookies por defecto: no instala ninguna cookie ni identificador de rastreo en tu dispositivo. Los datos recopilados son agregados y an\u00f3nimos e incluyen:",
+    section2List: [
+      "P\u00e1gina visitada",
+      "Pa\u00eds derivado de la IP (la direcci\u00f3n IP no se almacena)",
+      "Tipo de navegador y sistema operativo",
+      "URL de referencia",
+    ],
+    section2Footer:
+      "Vercel no almacena ninguna direcci\u00f3n IP. Puedes consultar la pol\u00edtica de privacidad de Vercel en",
+    section3Title: "3. M\u00e9tricas de rendimiento (Vercel Speed Insights)",
+    section3Body:
+      "Usamos Vercel Speed Insights para monitorizar el rendimiento de la p\u00e1gina (Core Web Vitals). Al igual que Analytics, funciona sin cookies y no almacena informaci\u00f3n de identificaci\u00f3n personal.",
+    section4Title: "4. Servicios de terceros",
+    section4Body:
+      "El \u00fanico servicio de terceros que recibe datos es Vercel Inc. (con sede en San Francisco, EE.UU.), que act\u00faa como proveedor de alojamiento y anal\u00edtica. Vercel cumple con el RGPD.",
+    section5Title: "5. Tus derechos (RGPD)",
+    section5Body:
+      "Dado que no recopilamos informaci\u00f3n de identificaci\u00f3n personal y no se utilizan cookies, no existe ning\u00fan perfil de datos personales asociado a ti. Si tienes alguna pregunta, puedes contactarnos a trav\u00e9s del repositorio p\u00fablico:",
+    repoLabel: "Ver el proyecto en GitHub",
+    section6Title: "6. Cambios en esta pol\u00edtica",
+    section6Body:
+      "Podemos actualizar esta pol\u00edtica a medida que evolucione la aplicaci\u00f3n. La fecha al inicio de esta p\u00e1gina indica cu\u00e1ndo fue revisada por \u00faltima vez.",
+    backHome: "\u2190 Volver al editor",
+  },
 };

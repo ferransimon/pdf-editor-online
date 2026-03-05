@@ -106,6 +106,41 @@ export const en = {
     toLight: "Switch to light mode",
     toDark: "Switch to dark mode",
   },
+  privacy: {
+    link: "Privacy policy",
+    title: "Privacy Policy",
+    lastUpdated: "Last updated: March 5, 2026",
+    intro:
+      "This privacy policy explains what data is collected when you use PDF Editor Online and how it is used.",
+    section1Title: "1. Local file processing",
+    section1Body:
+      "All PDF operations (split, merge, annotate) are performed entirely in your browser. Your files are never uploaded to any server. We have no access to the documents you process.",
+    section2Title: "2. Analytics (Vercel Analytics)",
+    section2Body:
+      "We use Vercel Analytics to understand how the application is used. This service works in cookieless mode by default: it does not set any cookies or tracking identifiers on your device. The data collected is aggregated and anonymous and includes:",
+    section2List: [
+      "Page visited",
+      "Country derived from IP (IP address is not stored)",
+      "Browser and operating system type",
+      "Referrer URL",
+    ],
+    section2Footer:
+      "No IP address is stored by Vercel. You can read Vercel\u2019s privacy policy at",
+    section3Title: "3. Performance metrics (Vercel Speed Insights)",
+    section3Body:
+      "We use Vercel Speed Insights to monitor page performance (Core Web Vitals). Like Analytics, it works without cookies and does not store personally identifiable information.",
+    section4Title: "4. Third-party services",
+    section4Body:
+      "The only third-party service that receives data is Vercel Inc. (based in San Francisco, USA), acting as our hosting and analytics provider. Vercel is compliant with GDPR.",
+    section5Title: "5. Your rights (GDPR)",
+    section5Body:
+      "Since we do not collect personally identifiable information and no cookies are used, there is no personal data profile associated with you. If you have any questions, you can reach us through the public repository:",
+    repoLabel: "View the project on GitHub",
+    section6Title: "6. Changes to this policy",
+    section6Body:
+      "We may update this policy as the application evolves. The date at the top of this page indicates when it was last revised.",
+    backHome: "\u2190 Back to the editor",
+  },
 };
 
 export type Translations = typeof en;

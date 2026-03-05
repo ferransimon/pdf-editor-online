@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Scissors, Merge, PenLine, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
@@ -50,7 +51,14 @@ export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps
           <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-zinc-400" />
           <p className="text-xs text-zinc-400 leading-relaxed">
             <span className="font-medium text-zinc-500">{t.modeSelector.privacy}</span>{" "}
-            {t.modeSelector.privacyDesc}
+            {t.modeSelector.privacyDesc}{" "}
+            <Link
+              href="/privacy"
+              className="underline underline-offset-2 hover:text-zinc-600 transition-colors"
+            >
+              {t.privacy.link}
+            </Link>
+            .
           </p>
         </div>
       </div>
