@@ -13,6 +13,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type {
@@ -23,6 +24,7 @@ import type {
   ImageAnnotation,
 } from "@/lib/pdf-annotator";
 import { useI18n } from "@/i18n";
+import { ClonePageModal } from "@/components/clone-page-modal";
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   const [currentPage, setCurrentPage] = useState(0);
   const [pageLoading, setPageLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [cloneModalOpen, setCloneModalOpen] = useState(false);
 
   // ── tool state ─────────────────────────────────────────────────────────
   const [tool, setTool] = useState<Tool>("draw");
@@ -455,6 +458,20 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
     setPendingText(null);
   };
 
+  // ── clone annotations to other pages ────────────────────────────────────
+  const handleCloneConfirm = (targets: number[]) => {
+    const sourceAnns = annotations.get(currentPage) ?? [];
+    if (sourceAnns.length === 0) return;
+    setAnnotations((prev) => {
+      const next = new Map(prev);
+      for (const idx of targets) {
+        next.set(idx, [...(prev.get(idx) ?? []), ...sourceAnns]);
+      }
+      return next;
+    });
+    setCloneModalOpen(false);
+  };
+
   // ── undo ───────────────────────────────────────────────────────────────
   const handleUndo = () => {
     setAnnotations((prev) => {
@@ -744,6 +761,18 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
         )}
 
         <div className="flex-1" />
+
+        {/* Clone to pages */}
+        {hasAnnotationsOnPage && pageCount > 1 && (
+          <button
+            onClick={() => setCloneModalOpen(true)}
+            title={t.annotate.cloneButton}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-600 hover:bg-zinc-100 transition-colors"
+          >
+            <Copy className="h-4 w-4" />
+            <span className="hidden sm:inline">{t.annotate.cloneButton}</span>
+          </button>
+        )}
 
         {/* Undo */}
         <button
@@ -1084,6 +1113,17 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
             </div>
           </div>
         </div>
+      )}
+
+      {/* Clone page modal */}
+      {cloneModalOpen && docRef.current && (
+        <ClonePageModal
+          pdfDoc={docRef.current}
+          pageCount={pageCount}
+          sourcePage={currentPage}
+          onConfirm={handleCloneConfirm}
+          onClose={() => setCloneModalOpen(false)}
+        />
       )}
     </div>
   );

@@ -90,6 +90,16 @@ export const es: Translations = {
     textHint: "El texto aparecer\u00e1 en el centro de la p\u00e1gina. Podr\u00e1s arrastrarlo al lugar exacto.",
     insertText: "Insertar texto",
     currentColor: "Color actual",
+    cloneButton: "Clonar en páginas",
+    cloneModal: {
+      title: "Clonar anotaciones en páginas",
+      selectAll: "Seleccionar todo",
+      deselectAll: "Deseleccionar todo",
+      apply: "Aplicar",
+      cancel: "Cancelar",
+      currentPage: "actual",
+      selected: (n: number) => `${n} página${n === 1 ? "" : "s"} seleccionada${n === 1 ? "" : "s"}`,
+    },
   },
   sidebar: {
     pages: (n: number) => `P\u00e1ginas (${n})`,

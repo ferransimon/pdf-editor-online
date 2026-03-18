@@ -88,6 +88,16 @@ export const en = {
     textHint: "The text will appear at the center of the page. You can drag it to the exact position.",
     insertText: "Insert text",
     currentColor: "Current color",
+    cloneButton: "Clone to pages",
+    cloneModal: {
+      title: "Clone annotations to pages",
+      selectAll: "Select all",
+      deselectAll: "Deselect all",
+      apply: "Apply",
+      cancel: "Cancel",
+      currentPage: "current",
+      selected: (n: number) => `${n} page${n === 1 ? "" : "s"} selected`,
+    },
   },
   sidebar: {
     pages: (n: number) => `Pages (${n})`,
