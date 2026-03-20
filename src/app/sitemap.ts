@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const APP_URL = "https://pdf-editor-online.vercel.app";
+const APP_URL = "https://my-pdf-online.vercel.app";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
