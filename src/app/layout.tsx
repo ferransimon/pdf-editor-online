@@ -80,6 +80,7 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       {/* Blocking script: sets .dark before first paint to avoid flash-of-white */}
       <head>
+        <meta name="google-site-verification" content="aO_8pbehse45T65ngneE7MzHdx27H7yBxXn_wlRt_rc" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem('theme')||((window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`,
