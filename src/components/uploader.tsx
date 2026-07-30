@@ -11,7 +11,7 @@ interface UploaderProps {
   onFileLoaded: (file: PdfFile) => void;
   loading?: boolean;
   onBack?: () => void;
-  mode?: "split" | "annotate";
+  mode?: "split" | "annotate" | "compress";
 }
 
 export function Uploader({ onFileLoaded, loading, onBack, mode = "split" }: UploaderProps) {
@@ -79,10 +79,14 @@ export function Uploader({ onFileLoaded, loading, onBack, mode = "split" }: Uplo
         )}
         <div className="flex flex-col items-center gap-2 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
-            {mode === "annotate" ? t.uploader.annotateTitle : t.uploader.splitTitle}
+            {mode === "annotate" ? t.uploader.annotateTitle :
+             mode === "compress" ? t.uploader.compressTitle :
+             t.uploader.splitTitle}
           </h1>
           <p className="text-sm text-zinc-400">
-            {mode === "annotate" ? t.uploader.annotateSubtitle : t.uploader.splitSubtitle}
+            {mode === "annotate" ? t.uploader.annotateSubtitle :
+             mode === "compress" ? t.uploader.compressSubtitle :
+             t.uploader.splitSubtitle}
           </p>
         </div>
 

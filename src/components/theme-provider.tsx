@@ -1,12 +1,13 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, startTransition } from "react";
+import { flushSync } from "react-dom";
 
 type Theme = "light" | "dark";
 
 interface ThemeContextValue {
   theme: Theme;
-  toggle: () => void;
+  toggle: (x?: number, y?: number) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -32,13 +33,31 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     startTransition(() => setTheme(preferred));
   }, []);
 
-  const toggle = () => {
-    setTheme((prev) => {
-      const next = prev === "light" ? "dark" : "light";
-      localStorage.setItem("theme", next);
-      applyTheme(next);
-      return next;
-    });
+  const toggle = (x?: number, y?: number) => {
+    // Set CSS custom properties for circle center
+    if (x !== undefined && y !== undefined) {
+      document.documentElement.style.setProperty("--x", `${x}px`);
+      document.documentElement.style.setProperty("--y", `${y}px`);
+    }
+
+    const switchTheme = () => {
+      flushSync(() => {
+        setTheme((prev) => {
+          const next = prev === "light" ? "dark" : "light";
+          localStorage.setItem("theme", next);
+          applyTheme(next);
+          return next;
+        });
+      });
+    };
+
+    // Use View Transition API if available
+    if (typeof document !== "undefined" && "startViewTransition" in document) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document as any).startViewTransition(switchTheme);
+    } else {
+      switchTheme();
+    }
   };
 
   return (

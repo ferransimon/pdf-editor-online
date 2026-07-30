@@ -70,14 +70,19 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   // ── annotations (page index → Annotation[]) ────────────────────────────
   const [annotations, setAnnotations] = useState<Map<number, Annotation[]>>(new Map());
 
-  // ── text dialog + draggable text ────────────────────────────────────────
-  const [textDialogOpen, setTextDialogOpen] = useState(false);
-  const [textDialogValue, setTextDialogValue] = useState("");
+  // ── draggable text (like image, editable in-place) ─────────────────────
   const [pendingText, setPendingText] = useState<{
     text: string;
     x: number; // CSS px relative to canvas container
     y: number;
+    w: number; // width in px
+    editingIndex?: number; // if editing existing annotation, store its index
   } | null>(null);
+
+  // ── dragging existing text annotation ──────────────────────────────────
+  const [draggingTextIndex, setDraggingTextIndex] = useState<number | null>(null);
+  const [hoveredTextIndex, setHoveredTextIndex] = useState<number | null>(null);
+  const dragTextOffsetRef = useRef<{ x: number; y: number } | null>(null);
 
   // ── pending image (drag+resize before committing) ────────────────────────
   const [pendingImage, setPendingImage] = useState<{
@@ -123,6 +128,7 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   const colorRef = useRef(PALETTE[0]);
   const lineWidthIdxRef = useRef(1);
   const fontSizeRef = useRef(16);
+  const draggingTextIndexRef = useRef<number | null>(null);
 
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
@@ -130,6 +136,7 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   useEffect(() => { colorRef.current = color; }, [color]);
   useEffect(() => { lineWidthIdxRef.current = lineWidthIdx; }, [lineWidthIdx]);
   useEffect(() => { fontSizeRef.current = fontSize; }, [fontSize]);
+  useEffect(() => { draggingTextIndexRef.current = draggingTextIndex; }, [draggingTextIndex]);
 
   // ── load PDF document ──────────────────────────────────────────────────
   useEffect(() => {
@@ -289,9 +296,31 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   // ── pointer events ─────────────────────────────────────────────────────
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const cssX = e.clientX - rect.left;
+    const cssY = e.clientY - rect.top;
     const { x, y } = getNorm(e);
     const t = toolRef.current;
 
+    // Check if clicking on existing text annotation (any tool)
+    const pageAnns = annotationsRef.current.get(currentPageRef.current) ?? [];
+    const textHit = findTextAtPosition(x, y, pageAnns);
+
+    if (textHit) {
+      // Start dragging existing text
+      setDraggingTextIndex(textHit.index);
+      const textAnn = textHit.annotation as TextAnnotation;
+      dragTextOffsetRef.current = {
+        x: x - textAnn.x,
+        y: y - textAnn.y,
+      };
+      overlayCanvasRef.current?.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    // Normal tool behavior
     if (t === "draw") {
       isDrawingRef.current = true;
       currentStrokePointsRef.current = [{ x, y }];
@@ -301,14 +330,63 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
       rectStartRef.current = { x, y };
       overlayCanvasRef.current?.setPointerCapture(e.pointerId);
     } else if (t === "text") {
-      setTextDialogValue("");
-      setTextDialogOpen(true);
+      // Create editable text box at click position
+      setPendingText({ text: "", x: cssX, y: cssY, w: 200 });
     }
+  };
+
+  // Find text annotation at normalized position
+  const findTextAtPosition = (normX: number, normY: number, pageAnns: Annotation[]) => {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+
+    // Check in reverse order (top-most annotations first)
+    for (let i = pageAnns.length - 1; i >= 0; i--) {
+      const ann = pageAnns[i];
+      if (ann.kind !== "text") continue;
+
+      const pxSize = ann.fontSize * renderScaleRef.current;
+      const textWidth = ann.text.length * (pxSize * 0.6); // rough approximation
+      const textHeight = ann.text.split("\n").length * pxSize * 1.25;
+
+      if (
+        normX >= ann.x && normX <= ann.x + textWidth / rect.width &&
+        normY >= ann.y - pxSize / rect.height && normY <= ann.y + textHeight / rect.height
+      ) {
+        return { index: i, annotation: ann };
+      }
+    }
+    return null;
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { x, y } = getNorm(e);
     const t = toolRef.current;
+
+    // Check for hover over existing text (update cursor)
+    const pageAnns = annotationsRef.current.get(currentPageRef.current) ?? [];
+    const textHit = findTextAtPosition(x, y, pageAnns);
+    setHoveredTextIndex(textHit ? textHit.index : null);
+
+    // Dragging existing text
+    if (draggingTextIndexRef.current !== null && dragTextOffsetRef.current) {
+      const newX = x - dragTextOffsetRef.current.x;
+      const newY = y - dragTextOffsetRef.current.y;
+
+      setAnnotations((prev) => {
+        const next = new Map(prev);
+        const page = currentPageRef.current;
+        const pageAnns = [...(next.get(page) ?? [])];
+        const ann = pageAnns[draggingTextIndexRef.current!];
+        if (ann && ann.kind === "text") {
+          pageAnns[draggingTextIndexRef.current!] = { ...ann, x: newX, y: newY };
+        }
+        next.set(page, pageAnns);
+        return next;
+      });
+      return;
+    }
 
     if (t === "draw" && isDrawingRef.current) {
       const canvas = overlayCanvasRef.current!;
@@ -352,6 +430,13 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { x, y } = getNorm(e);
     const t = toolRef.current;
+
+    // Stop dragging text
+    if (draggingTextIndexRef.current !== null) {
+      setDraggingTextIndex(null);
+      dragTextOffsetRef.current = null;
+      return;
+    }
 
     if (t === "draw" && isDrawingRef.current) {
       isDrawingRef.current = false;
@@ -431,30 +516,40 @@ export function AnnotationEditor({ pdfBytes, pdfName, onBack }: AnnotationEditor
     reader.readAsArrayBuffer(file);
   };
 
-  // ── text dialog handlers ────────────────────────────────────────────────
-  const handleDialogSave = () => {
-    if (!textDialogValue.trim()) { setTextDialogOpen(false); return; }
-    // Place text at centre of canvas
-    const canvas = bgCanvasRef.current;
-    const cx = canvas ? canvas.width / 2 : 200;
-    const cy = canvas ? canvas.height / 2 : 200;
-    setPendingText({ text: textDialogValue.trim(), x: cx, y: cy });
-    setTextDialogOpen(false);
-    setTextDialogValue("");
-  };
-
+  // ── text handlers ──────────────────────────────────────────────────────
   const commitPendingText = () => {
-    if (!pendingText) return;
+    if (!pendingText || !pendingText.text.trim()) {
+      setPendingText(null);
+      return;
+    }
     const canvas = bgCanvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+
+    // pendingText.x/y are CSS pixels relative to canvas (top-left corner)
+    // Normalize to [0,1] for storage
     const ann: TextAnnotation = {
       kind: "text",
-      x: pendingText.x / canvas.width,
-      y: pendingText.y / canvas.height,
-      text: pendingText.text,
+      x: pendingText.x / rect.width,
+      y: pendingText.y / rect.height,
+      text: pendingText.text.trim(),
       fontSize: fontSizeRef.current,
       color: colorRef.current,
     };
-    addAnnotation(ann);
+
+    if (pendingText.editingIndex !== undefined) {
+      // Editing existing annotation - replace it
+      setAnnotations((prev) => {
+        const next = new Map(prev);
+        const page = currentPageRef.current;
+        const pageAnns = [...(next.get(page) ?? [])];
+        pageAnns[pendingText.editingIndex!] = ann;
+        next.set(page, pageAnns);
+        return next;
+      });
+    } else {
+      // New annotation
+      addAnnotation(ann);
+    }
     setPendingText(null);
   };
 
@@ -612,7 +707,6 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
   };
 
   const hasAnnotationsOnPage = (annotations.get(currentPage) ?? []).length > 0;
-  const cursorClass = tool === "text" ? "cursor-text" : "cursor-crosshair";
 
   // ── render ─────────────────────────────────────────────────────────────
   return (
@@ -826,31 +920,33 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
               {/* Overlay — drawing surface, outside overflow-hidden so textarea isn't clipped */}
               <canvas
                 ref={overlayCanvasRef}
-                className={`absolute inset-0 ${cursorClass}`}
+                className={`absolute inset-0`}
                 style={{
                   touchAction: "none",
                   pointerEvents: pageLoading || !!pendingText || !!pendingImage ? "none" : "auto",
                   opacity: pageLoading ? 0 : 1,
+                  cursor: hoveredTextIndex !== null ? "grab" : (tool === "text" ? "text" : "crosshair"),
                 }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
               />
 
-              {/* Draggable pending text — positioned over canvas, outside overflow-hidden */}
+              {/* Draggable + editable pending text */}
               {pendingText && (
                 <div
                   style={{
                     position: "absolute",
                     left: pendingText.x,
                     top: pendingText.y,
-                    transform: "translate(-50%, -50%)",
+                    width: pendingText.w,
                     zIndex: 50,
-                    cursor: textDragRef.current ? "grabbing" : "grab",
                     userSelect: "none",
                     touchAction: "none",
                   }}
                   onPointerDown={(e) => {
+                    // Only drag from the border/edges, not the textarea
+                    if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
                     e.currentTarget.setPointerCapture(e.pointerId);
                     textDragRef.current = {
                       startPtrX: e.clientX,
@@ -869,27 +965,37 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
                   }}
                   onPointerUp={() => { textDragRef.current = null; }}
                 >
-                  {/* Text preview */}
-                  <div
+                  {/* Editable textarea */}
+                  <textarea
+                    autoFocus
+                    value={pendingText.text}
+                    onChange={(e) => setPendingText((prev) => prev ? { ...prev, text: e.target.value } : null)}
+                    placeholder={t.annotate.textPlaceholder}
                     style={{
+                      width: "100%",
+                      minHeight: 60,
                       fontSize: fontSize * renderScaleRef.current + "px",
                       color,
                       fontFamily: "sans-serif",
                       lineHeight: 1.25,
-                      whiteSpace: "pre",
-                      padding: "4px 8px",
-                      border: "2px dashed rgba(0,0,0,0.4)",
+                      padding: "8px",
+                      border: "2px dashed rgba(0,0,0,0.5)",
                       borderRadius: 4,
-                      background: "rgba(255,255,255,0.85)",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-                      pointerEvents: "none",
+                      background: "rgba(255,255,255,0.95)",
+                      boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
+                      resize: "vertical",
+                      outline: "none",
+                      cursor: "text",
                     }}
-                  >
-                    {pendingText.text}
-                  </div>
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setPendingText(null);
+                    }}
+                  />
 
                   {/* Action buttons */}
-                  <div className="flex gap-1.5 mt-1.5 justify-center" style={{ pointerEvents: "auto" }}>
+                  <div
+                    style={{ position: "absolute", bottom: -36, left: 0, display: "flex", gap: 6 }}
+                  >
                     <button
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={commitPendingText}
@@ -1052,68 +1158,6 @@ ${dataUrls.map((url) => `  <div class="page"><img src="${url}" /></div>`).join("
           </>
         )}
       </div>
-
-      {/* ── Text dialog ── */}
-      {textDialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => setTextDialogOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm flex flex-col gap-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-base font-semibold text-zinc-900">{t.annotate.addTextTitle}</h2>
-
-            <textarea
-              autoFocus
-              rows={4}
-              value={textDialogValue}
-              onChange={(e) => setTextDialogValue(e.target.value)}
-              placeholder={t.annotate.textPlaceholder}
-              className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 resize-none focus:outline-none focus:ring-2 focus:ring-zinc-400"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleDialogSave();
-                if (e.key === "Escape") setTextDialogOpen(false);
-              }}
-            />
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500">{t.annotate.fontSize}</span>
-              <select
-                value={fontSize}
-                onChange={(e) => setFontSize(Number(e.target.value))}
-                className="text-xs border border-zinc-200 rounded-md px-2 py-1 bg-white text-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-400"
-              >
-                {[8, 10, 12, 14, 16, 18, 24, 32, 48].map((s) => (
-                  <option key={s} value={s}>{s} pt</option>
-                ))}
-              </select>
-              <div
-                className="h-5 w-5 rounded-full border border-zinc-300 ml-auto"
-                style={{ backgroundColor: color }}
-                title={t.annotate.currentColor}
-              />
-            </div>
-
-            <p className="text-xs text-zinc-400">
-              {t.annotate.textHint}
-            </p>
-
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setTextDialogOpen(false)}
-                className="px-4 py-2 rounded-lg text-sm text-zinc-600 hover:bg-zinc-100 transition-colors"
-              >
-                {t.annotate.cancel}
-              </button>
-              <Button onClick={handleDialogSave} size="sm" disabled={!textDialogValue.trim()}>
-                {t.annotate.insertText}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Clone page modal */}
       {cloneModalOpen && docRef.current && (

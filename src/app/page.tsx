@@ -6,6 +6,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { ModeSelector } from "@/components/mode-selector";
 import { MergeEditor } from "@/components/merge-editor";
 import { AnnotationEditor } from "@/components/annotation-editor";
+import { CompressEditor } from "@/components/compress-editor";
 import { Uploader } from "@/components/uploader";
 import { Toolbar } from "@/components/toolbar";
 import { SidebarThumbnails } from "@/components/sidebar-thumbnails";
@@ -36,7 +37,7 @@ function getDefaultName(section: Section): string {
 
 // ─── page ───────────────────────────────────────────────────────────────────
 
-type Phase = "idle" | "split-upload" | "loading" | "loaded" | "merge" | "annotate-upload" | "annotate";
+type Phase = "idle" | "split-upload" | "loading" | "loaded" | "merge" | "annotate-upload" | "annotate" | "compress-upload" | "compress";
 
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -44,6 +45,8 @@ export default function Home() {
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
   const [annotatePdfBytes, setAnnotatePdfBytes] = useState<ArrayBuffer | null>(null);
   const [annotatePdfName, setAnnotatePdfName] = useState("");
+  const [compressPdfBytes, setCompressPdfBytes] = useState<ArrayBuffer | null>(null);
+  const [compressPdfName, setCompressPdfName] = useState("");
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [splitPoints, setSplitPoints] = useState<Set<number>>(new Set());
   const [sectionNames, setSectionNames] = useState<string[]>([]);
@@ -142,6 +145,7 @@ export default function Home() {
         onSplit={() => setPhase("split-upload")}
         onMerge={() => setPhase("merge")}
         onAnnotate={() => setPhase("annotate-upload")}
+        onCompress={() => setPhase("compress-upload")}
       />
     );
   }
@@ -155,6 +159,30 @@ export default function Home() {
       <AnnotationEditor
         pdfBytes={annotatePdfBytes!}
         pdfName={annotatePdfName}
+        onBack={() => setPhase("idle")}
+      />
+    );
+  }
+
+  if (phase === "compress") {
+    return (
+      <CompressEditor
+        pdfBytes={compressPdfBytes!}
+        pdfName={compressPdfName}
+        onBack={() => setPhase("idle")}
+      />
+    );
+  }
+
+  if (phase === "compress-upload") {
+    return (
+      <Uploader
+        mode="compress"
+        onFileLoaded={async (file) => {
+          setCompressPdfBytes(file.bytes);
+          setCompressPdfName(file.name);
+          setPhase("compress");
+        }}
         onBack={() => setPhase("idle")}
       />
     );

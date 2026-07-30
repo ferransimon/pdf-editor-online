@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Scissors, Merge, PenLine, ShieldCheck } from "lucide-react";
+import { Scissors, Merge, PenLine, FileArchive, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 
@@ -9,9 +9,10 @@ interface ModeSelectorProps {
   onSplit: () => void;
   onMerge: () => void;
   onAnnotate: () => void;
+  onCompress: () => void;
 }
 
-export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps) {
+export function ModeSelector({ onSplit, onMerge, onAnnotate, onCompress }: ModeSelectorProps) {
   const { t } = useI18n();
   return (
     <div className="flex min-h-screen items-center justify-center bg-white">
@@ -25,7 +26,7 @@ export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 w-full">
+        <div className="grid grid-cols-2 gap-4 w-full">
           <ModeCard
             icon={<Scissors className="h-6 w-6" />}
             title={t.modeSelector.split}
@@ -43,6 +44,12 @@ export function ModeSelector({ onSplit, onMerge, onAnnotate }: ModeSelectorProps
             title={t.modeSelector.annotate}
             description={t.modeSelector.annotateDesc}
             onClick={onAnnotate}
+          />
+          <ModeCard
+            icon={<FileArchive className="h-6 w-6" />}
+            title={t.modeSelector.compress}
+            description={t.modeSelector.compressDesc}
+            onClick={onCompress}
           />
         </div>
 
