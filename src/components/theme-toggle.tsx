@@ -10,7 +10,12 @@ export function ThemeToggle() {
 
   return (
     <button
-      onClick={toggle}
+      onClick={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        toggle(x, y);
+      }}
       title={theme === "dark" ? t.theme.toLight : t.theme.toDark}
       className="fixed bottom-4 right-4 z-50 flex items-center justify-center w-9 h-9 rounded-full bg-zinc-900 text-zinc-50 shadow-lg hover:bg-zinc-700 transition-colors"
     >
